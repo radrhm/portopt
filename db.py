@@ -7,6 +7,10 @@ from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portopt.db")
 
+# Vercel serverless functions have a read-only filesystem except for /tmp
+if os.environ.get("VERCEL_ENV") or os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/portopt.db"
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
