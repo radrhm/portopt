@@ -10,3 +10,4 @@ ENV/
 build/
 dist/
 .vercel/
+test_err.json
