@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(pip --version)",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import app; print\\('OK'\\)\")",
+      "Bash(python app.py)",
+      "Bash(curl -s http://127.0.0.1:5000/)"
+    ]
+  }
+}
