@@ -11,3 +11,4 @@ build/
 dist/
 .vercel/
 test_err.json
+.claude/
