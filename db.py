@@ -7,8 +7,11 @@ from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portopt.db")
 
-# Vercel serverless functions have a read-only filesystem except for /tmp
-if os.environ.get("VERCEL_ENV") or os.environ.get("VERCEL"):
+# Fallback to /tmp if we cannot write to the current directory (Vercel/AWS Lambda)
+try:
+    with open(DB_PATH, "a"):
+        pass
+except OSError:
     DB_PATH = "/tmp/portopt.db"
 
 
