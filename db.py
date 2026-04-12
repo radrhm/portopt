@@ -2,12 +2,15 @@
 
 import sqlite3
 import json
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portopt.db")
 
-# Fallback to /tmp if we cannot write to the current directory (Vercel/AWS Lambda)
+# Fallback to /tmp if we cannot write to the current directory (Vercel / AWS Lambda)
 try:
     with open(DB_PATH, "a"):
         pass
@@ -15,37 +18,45 @@ except OSError:
     DB_PATH = "/tmp/portopt.db"
 
 
-def get_conn():
+def _utcnow() -> str:
+    """Return current UTC time as an ISO string (no tzinfo suffix)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
-def init_db():
-    conn = get_conn()
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS portfolios (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL DEFAULT 'Untitled',
-        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-        settings    TEXT NOT NULL DEFAULT '{}',
-        tickers     TEXT NOT NULL DEFAULT '{}',
-        overrides   TEXT NOT NULL DEFAULT '{}',
-        bl_views    TEXT NOT NULL DEFAULT '{}',
-        custom_weights TEXT,
-        results     TEXT,
-        is_custom   INTEGER NOT NULL DEFAULT 0
-    );
-    """)
-    conn.commit()
-    conn.close()
+def init_db() -> None:
+    try:
+        conn = get_conn()
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS portfolios (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            name           TEXT NOT NULL DEFAULT 'Untitled',
+            created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            settings       TEXT NOT NULL DEFAULT '{}',
+            tickers        TEXT NOT NULL DEFAULT '{}',
+            overrides      TEXT NOT NULL DEFAULT '{}',
+            bl_views       TEXT NOT NULL DEFAULT '{}',
+            custom_weights TEXT,
+            results        TEXT,
+            is_custom      INTEGER NOT NULL DEFAULT 0
+        );
+        """)
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("init_db failed — portfolio persistence unavailable")
 
 
-# ── CRUD ──────────────────────────────────────────────────────────────────────
+# ── CRUD ───────────────────────────────────────────────────────────────────────
 
-def list_portfolios():
+def list_portfolios() -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
         "SELECT id, name, created_at, updated_at, is_custom FROM portfolios ORDER BY updated_at DESC"
@@ -54,7 +65,7 @@ def list_portfolios():
     return [dict(r) for r in rows]
 
 
-def get_portfolio(pid):
+def get_portfolio(pid: int) -> dict | None:
     conn = get_conn()
     row = conn.execute("SELECT * FROM portfolios WHERE id=?", (pid,)).fetchone()
     conn.close()
@@ -72,10 +83,10 @@ def get_portfolio(pid):
     return d
 
 
-def save_portfolio(data):
+def save_portfolio(data: dict) -> int:
     """Insert or update. If data has 'id', update; otherwise insert. Returns id."""
     conn = get_conn()
-    now = datetime.utcnow().isoformat()
+    now = _utcnow()
     pid = data.get("id")
 
     fields = {
@@ -105,7 +116,7 @@ def save_portfolio(data):
     return pid
 
 
-def delete_portfolio(pid):
+def delete_portfolio(pid: int) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM portfolios WHERE id=?", (pid,))
     conn.commit()
