@@ -6,6 +6,7 @@ from flask import Flask, render_template, jsonify
 from routes.optimize import optimize_bp
 from routes.portfolio import portfolio_bp
 from routes.export import export_bp
+from routes.valuation import valuation_bp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,6 +17,7 @@ app = Flask(__name__)
 app.register_blueprint(optimize_bp)
 app.register_blueprint(portfolio_bp)
 app.register_blueprint(export_bp)
+app.register_blueprint(valuation_bp)
 
 
 @app.route("/")

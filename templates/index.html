@@ -16,8 +16,18 @@
   <img src="/static/favicon.png" alt="PortOpt" style="width:28px;height:28px;border-radius:6px;flex-shrink:0;"/>
   <div>
     <div class="logo">PortOpt</div>
-    <div class="logo-sub">Interactive Portfolio Optimization</div>
+    <div class="logo-sub">Investment Analysis Platform</div>
   </div>
+  <nav class="app-nav">
+    <button class="app-nav-btn active" id="nav-portfolio" onclick="switchApp('portfolio')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      Portfolio Optimization
+    </button>
+    <button class="app-nav-btn" id="nav-valuation" onclick="switchApp('valuation')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Equity Valuation
+    </button>
+  </nav>
   <div id="header-status" style="margin-left:auto;font-size:11px;color:var(--muted);"></div>
 </div>
 
@@ -139,7 +149,6 @@
   </button>
 
 </aside>
-
 <!-- ══ MAIN ══════════════════════════════════════════════════════════════ -->
 <main>
   <div id="state-empty" class="empty-state">
@@ -405,8 +414,279 @@
 
   </div>
 </main>
+
+<!-- ══ EQUITY VALUATION APP ══════════════════════════════════════════════ -->
+<div id="valuation-app" style="display:none;grid-column:1/-1;overflow-y:auto;background:var(--bg);padding:24px 28px;">
+
+  <!-- Search bar -->
+  <div class="val-search-bar">
+    <div class="val-search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--muted);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="val-ticker-input" placeholder="Enter a ticker symbol (e.g. AAPL, MSFT, TSLA)…"
+             autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')loadValuation()"/>
+      <button class="btn btn-primary" onclick="loadValuation()" id="val-search-btn">Analyse</button>
+    </div>
+    <div id="val-status" style="font-size:11px;color:var(--muted);min-height:16px;margin-top:6px;"></div>
+  </div>
+
+  <!-- Loading -->
+  <div id="val-loading" style="display:none;text-align:center;padding:60px 0;">
+    <div class="spinner"></div>
+    <div class="loading-msg">Fetching financials…</div>
+  </div>
+
+  <!-- Results -->
+  <div id="val-results" style="display:none;">
+
+    <!-- Stock header card -->
+    <div class="val-header-card">
+      <div>
+        <div class="val-ticker-name" id="val-name"></div>
+        <div class="val-meta" id="val-meta"></div>
+      </div>
+      <div class="val-price-block">
+        <div class="val-current-price" id="val-price"></div>
+        <div style="font-size:11px;color:var(--muted);">Current Market Price</div>
+      </div>
+    </div>
+
+    <!-- Valuation comparison bar chart -->
+    <div class="chart-card" style="margin-bottom:20px;">
+      <div class="chart-header">
+        <div class="chart-title" style="margin:0;">Intrinsic Value vs Market Price</div>
+        <div style="font-size:11px;color:var(--muted);">Each bar shows the estimated fair value from one method. The red line is the current price.</div>
+      </div>
+      <div id="val-chart-compare" style="height:220px;"></div>
+    </div>
+
+    <!-- Method cards grid -->
+    <div class="val-methods-grid" id="val-methods-grid">
+
+      <!-- ── DCF ──────────────────────────────────────────────── -->
+      <div class="val-card" id="vcard-dcf">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">Discounted Cash Flow (DCF)</div>
+            <div class="val-card-subtitle">Intrinsic value based on future free cash flows discounted back to today</div>
+          </div>
+          <div class="val-card-result" id="res-dcf">—</div>
+        </div>
+        <div class="val-card-body">
+          <div class="val-inputs-grid">
+            <div class="val-inp-group">
+              <label>FCF per Share ($)</label>
+              <input type="number" id="dcf-fcf" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Last twelve months free cash flow per share</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Growth Rate — Yr 1–5 (%)</label>
+              <input type="number" id="dcf-g1" step="0.5" min="-20" max="60" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Expected annual FCF growth for first 5 years</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Growth Rate — Yr 6–10 (%)</label>
+              <input type="number" id="dcf-g2" step="0.5" min="-20" max="40" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Slower growth phase (years 6–10)</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Terminal Growth Rate (%)</label>
+              <input type="number" id="dcf-tg" step="0.1" min="0" max="5" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Perpetual growth after year 10 (≈ GDP growth, 2–3%)</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Discount Rate / WACC (%)</label>
+              <input type="number" id="dcf-wacc" step="0.1" min="3" max="25" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Weighted average cost of capital (suggested from beta)</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Margin of Safety (%)</label>
+              <input type="number" id="dcf-mos" step="1" min="0" max="50" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Discount to apply to the final DCF value (0 = no discount)</div>
+            </div>
+          </div>
+          <div class="val-updown" id="ud-dcf"></div>
+        </div>
+      </div>
+
+      <!-- ── DDM ──────────────────────────────────────────────── -->
+      <div class="val-card" id="vcard-ddm">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">Dividend Discount Model (DDM)</div>
+            <div class="val-card-subtitle">Gordon Growth Model — value based on future dividends discounted to present</div>
+          </div>
+          <div class="val-card-result" id="res-ddm">—</div>
+        </div>
+        <div class="val-card-body">
+          <div id="ddm-no-div" class="val-note" style="display:none;">
+            ⚠️ This stock pays no dividend. DDM is not applicable.
+          </div>
+          <div id="ddm-inputs">
+            <div class="val-inputs-grid">
+              <div class="val-inp-group">
+                <label>Annual Dividend per Share ($)</label>
+                <input type="number" id="ddm-div" step="0.01" min="0" oninput="recalcAll()"/>
+                <div class="val-inp-hint">Last annual dividend (or expected next year)</div>
+              </div>
+              <div class="val-inp-group">
+                <label>Dividend Growth Rate (%)</label>
+                <input type="number" id="ddm-g" step="0.5" min="0" max="20" oninput="recalcAll()"/>
+                <div class="val-inp-hint">Expected long-term dividend growth per year</div>
+              </div>
+              <div class="val-inp-group">
+                <label>Required Rate of Return (%)</label>
+                <input type="number" id="ddm-r" step="0.1" min="1" max="25" oninput="recalcAll()"/>
+                <div class="val-inp-hint">Your cost of equity / minimum acceptable return</div>
+              </div>
+            </div>
+            <div class="val-updown" id="ud-ddm"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── P/E ──────────────────────────────────────────────── -->
+      <div class="val-card" id="vcard-pe">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">Price / Earnings (P/E)</div>
+            <div class="val-card-subtitle">Applies a target P/E multiple to earnings — simple and widely used</div>
+          </div>
+          <div class="val-card-result" id="res-pe">—</div>
+        </div>
+        <div class="val-card-body">
+          <div class="val-inputs-grid">
+            <div class="val-inp-group">
+              <label>EPS — Trailing Twelve Months ($)</label>
+              <input type="number" id="pe-eps-ttm" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Earnings per share over the last 12 months</div>
+            </div>
+            <div class="val-inp-group">
+              <label>EPS — Forward Estimate ($)</label>
+              <input type="number" id="pe-eps-fwd" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Next twelve months consensus EPS estimate</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Target P/E Multiple (TTM)</label>
+              <input type="number" id="pe-mult-ttm" step="0.5" min="1" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Fair P/E based on sector / historical avg</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Target P/E Multiple (Forward)</label>
+              <input type="number" id="pe-mult-fwd" step="0.5" min="1" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Forward P/E to apply to next-year earnings</div>
+            </div>
+          </div>
+          <div class="val-two-results">
+            <div class="val-two-item"><span class="val-two-label">TTM P/E Value</span><span class="val-card-result sml" id="res-pe-ttm">—</span></div>
+            <div class="val-two-item"><span class="val-two-label">Forward P/E Value</span><span class="val-card-result sml" id="res-pe-fwd">—</span></div>
+          </div>
+          <div class="val-updown" id="ud-pe"></div>
+        </div>
+      </div>
+
+      <!-- ── EV/EBITDA ─────────────────────────────────────────── -->
+      <div class="val-card" id="vcard-ev">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">EV / EBITDA</div>
+            <div class="val-card-subtitle">Enterprise value multiple — useful for comparing capital-structure-agnostic value</div>
+          </div>
+          <div class="val-card-result" id="res-ev">—</div>
+        </div>
+        <div class="val-card-body">
+          <div class="val-inputs-grid">
+            <div class="val-inp-group">
+              <label>EBITDA ($ millions)</label>
+              <input type="number" id="ev-ebitda" step="10" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Earnings before interest, tax, depreciation &amp; amortisation</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Target EV/EBITDA Multiple</label>
+              <input type="number" id="ev-mult" step="0.5" min="1" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Sector fair-value multiple (suggested from peers)</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Net Debt ($ millions)</label>
+              <input type="number" id="ev-netdebt" step="10" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Total debt minus cash &amp; equivalents</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Shares Outstanding (millions)</label>
+              <input type="number" id="ev-shares" step="1" min="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Used to convert EV to per-share price</div>
+            </div>
+          </div>
+          <div class="val-updown" id="ud-ev"></div>
+        </div>
+      </div>
+
+      <!-- ── Graham Number ─────────────────────────────────────── -->
+      <div class="val-card" id="vcard-graham">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">Graham Number</div>
+            <div class="val-card-subtitle">Benjamin Graham's formula — geometric mean of max P/E (15×) and max P/B (1.5×)</div>
+          </div>
+          <div class="val-card-result" id="res-graham">—</div>
+        </div>
+        <div class="val-card-body">
+          <div class="val-inputs-grid">
+            <div class="val-inp-group">
+              <label>EPS — Trailing Twelve Months ($)</label>
+              <input type="number" id="gr-eps" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Must be positive for Graham Number to apply</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Book Value per Share ($)</label>
+              <input type="number" id="gr-bvps" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Total equity divided by shares outstanding</div>
+            </div>
+          </div>
+          <div id="graham-na" class="val-note" style="display:none;">
+            ⚠️ Graham Number requires positive EPS and positive book value.
+          </div>
+          <div class="val-updown" id="ud-graham"></div>
+        </div>
+      </div>
+
+      <!-- ── PEG ──────────────────────────────────────────────── -->
+      <div class="val-card" id="vcard-peg">
+        <div class="val-card-header">
+          <div>
+            <div class="val-card-title">PEG Ratio</div>
+            <div class="val-card-subtitle">P/E adjusted for growth — fair value assumes PEG = 1 (P/E equals growth rate)</div>
+          </div>
+          <div class="val-card-result" id="res-peg">—</div>
+        </div>
+        <div class="val-card-body">
+          <div class="val-inputs-grid">
+            <div class="val-inp-group">
+              <label>EPS ($)</label>
+              <input type="number" id="peg-eps" step="0.01" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Trailing twelve months earnings per share</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Earnings Growth Rate (%)</label>
+              <input type="number" id="peg-g" step="0.5" min="0.1" oninput="recalcAll()"/>
+              <div class="val-inp-hint">Expected annual EPS growth (5-year avg)</div>
+            </div>
+            <div class="val-inp-group">
+              <label>Target PEG Ratio</label>
+              <input type="number" id="peg-target" step="0.1" min="0.5" max="3" oninput="recalcAll()"/>
+              <div class="val-inp-hint">1.0 = fair value; &lt;1 = undervalued; &gt;1 = premium</div>
+            </div>
+          </div>
+          <div class="val-updown" id="ud-peg"></div>
+        </div>
+      </div>
+
+    </div><!-- /val-methods-grid -->
+  </div><!-- /val-results -->
+</div><!-- /valuation-app -->
+
 </div><!-- /app -->
 
 <script src="/static/js/app.js"></script>
+<script src="/static/js/valuation.js"></script>
 </body>
 </html>

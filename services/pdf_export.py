@@ -80,16 +80,16 @@ Portfolio weights: {json.dumps({{k: f"{v*100:.1f}%" for k, v in weights.items()}
 
 Write investor-friendly analysis in JSON with these exact keys:
 {{
-  "abstract": "150-180 word executive summary: what this portfolio is, how it was built, what the key numbers tell an investor, and the bottom-line assessment of its quality",
-  "overview": "80-100 word plain-English summary of how capital is distributed, which positions dominate, and what the overall return/risk profile implies for an investor",
+  "abstract": "250-300 word executive summary: what this portfolio is, how it was built, what the key numbers tell an investor, and the bottom-line assessment of its quality",
+  "overview": "80-100 word  summary of how capital is distributed, which positions dominate, and what the overall return/risk profile implies for an investor",
   "overview_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the portfolio composition for an investor",
-  "performance": "80-100 word investor-friendly commentary on return history, worst drawdown experienced, win rate, and how consistently the portfolio has delivered",
+  "performance": "80-100 word  commentary on return history, worst drawdown experienced, win rate, and how consistently the portfolio has delivered",
   "performance_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the performance data",
-  "risk": "80-100 word plain-English explanation of the key risks: how bad a bad day could get (VaR/CVaR), how closely it tracks the market (beta), and whether the manager adds value above the index (alpha)",
+  "risk": "80-100 word  explanation of the key risks: how bad a bad day could get (VaR/CVaR), how closely it tracks the market (beta), and whether the manager adds value above the index (alpha)",
   "risk_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the risk profile",
   "statistics": "80-100 word investor-friendly discussion: are individual stock returns normally distributed or do they have fat tails / skew? What does this mean for estimating risk?",
   "statistics_insight": "One punchy sentence (max 25 words) starting with a verb — the key implication of the distribution shape for the investor",
-  "method": "80-100 word plain-English explanation of why the {METHOD_NAMES.get(method, method)} approach was used, what problem it solves, and how the resulting weights reflect that goal",
+  "method": "80-100 word  explanation of why the {METHOD_NAMES.get(method, method)} approach was used, what problem it solves, and how the resulting weights reflect that goal",
   "method_insight": "One punchy sentence (max 25 words) starting with a verb — the key advantage this method offers over simpler alternatives",
   "scenarios": "80-100 word investor-friendly forward-looking commentary: what the Monte Carlo fan chart tells us about upside/downside range, and how the portfolio held up in historical crises",
   "scenarios_insight": "One punchy sentence (max 25 words) starting with a verb — the key resilience or vulnerability revealed by the stress tests"
