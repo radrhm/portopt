@@ -250,6 +250,26 @@ input:focus,select:focus{border-color:var(--accent);}
 .chart-desc{font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px;
   padding:5px 8px;background:#0a1020;border-radius:4px;border-left:2px solid var(--border);}
 
+/* ── STATS PANEL ─────────────────────────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:16px;}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.stat-card-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 12px;background:#0d1626;border-bottom:1px solid var(--border);}
+.stat-sym{font-weight:800;font-size:13px;color:var(--text);}
+.stat-weight{font-size:11px;color:var(--muted2);margin-left:auto;}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:3px;
+  font-size:10px;font-weight:700;}
+.badge-normal{background:rgba(16,185,129,.15);color:var(--green);}
+.badge-nonnormal{background:rgba(239,68,68,.15);color:var(--red);}
+.stat-hist{padding:4px 4px 0;height:150px;}
+.stat-table{width:100%;border-collapse:collapse;font-size:11px;margin:0;}
+.stat-table td{padding:4px 10px;border-bottom:1px solid rgba(255,255,255,.03);}
+.stat-table tr:last-child td{border-bottom:none;}
+.stat-table td:nth-child(odd){color:var(--muted);width:28%;}
+.stat-table td:nth-child(even){font-weight:600;width:22%;color:var(--text);}
+.stat-table td.pos{color:var(--green);}
+.stat-table td.neg{color:var(--red);}
+
 /* ── PRINT / PDF ──────────────────────────────────────────── */
 @media print {
   body{background:#fff;color:#000;font-size:11px;}

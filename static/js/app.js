@@ -1,3 +1,94 @@
+// ═══════════════════════════════════════════════════════════════════ STATS PANEL
+function renderStatsPanel(statsData, weights) {
+  const grid  = document.getElementById("stats-grid");
+  const empty = document.getElementById("stats-empty");
+  if (!statsData || !Object.keys(statsData).length) {
+    grid.innerHTML = "";
+    if (empty) empty.style.display = "block";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+
+  grid.innerHTML = "";
+  const tickers = Object.keys(statsData);
+  const colorMap = {};
+  COLORS.forEach((c, i) => { colorMap[tickers[i]] = c; });
+
+  tickers.forEach(sym => {
+    const s = statsData[sym];
+    const w = (weights[sym] || 0) * 100;
+    const color = colorMap[sym] || COLORS[0];
+
+    const card = document.createElement("div");
+    card.className = "stat-card";
+
+    const jbText = s.jb_normal
+      ? `<span class="badge badge-normal">Normal (p=${s.jb_pvalue.toFixed(3)})</span>`
+      : `<span class="badge badge-nonnormal">Non-normal (p=${s.jb_pvalue.toFixed(3)})</span>`;
+
+    card.innerHTML = `
+      <div class="stat-card-header">
+        <span class="stat-sym" style="border-left:3px solid ${color};padding-left:7px;">${sym}</span>
+        <span class="stat-weight">${w.toFixed(1)}% portfolio weight</span>
+        ${jbText}
+      </div>
+      <div id="shist-${sym}" class="stat-hist"></div>
+      <table class="stat-table">
+        <tr>
+          <td>Observations</td><td>${s.n_obs}</td>
+          <td>Ann. Return</td><td class="${s.ann_return>=0?'pos':'neg'}">${s.ann_return.toFixed(2)}%</td>
+        </tr><tr>
+          <td>Mean Daily</td><td>${s.mean_daily.toFixed(3)}%</td>
+          <td>Ann. Volatility</td><td>${s.ann_vol.toFixed(2)}%</td>
+        </tr><tr>
+          <td>Std Daily</td><td>${s.std_daily.toFixed(3)}%</td>
+          <td>Sharpe Ratio</td><td>${s.sharpe.toFixed(3)}</td>
+        </tr><tr>
+          <td>Skewness</td><td>${s.skewness.toFixed(3)}</td>
+          <td>Excess Kurtosis</td><td>${s.kurtosis.toFixed(3)}</td>
+        </tr><tr>
+          <td>Min Daily</td><td class="neg">${s.min_daily.toFixed(2)}%</td>
+          <td>Max Daily</td><td class="pos">${s.max_daily.toFixed(2)}%</td>
+        </tr><tr>
+          <td>P5 / P25</td><td>${s.p5.toFixed(2)}% / ${s.p25.toFixed(2)}%</td>
+          <td>P75 / P95</td><td>${s.p75.toFixed(2)}% / ${s.p95.toFixed(2)}%</td>
+        </tr><tr>
+          <td>VaR 95% daily</td><td class="neg">${s.var_95_daily.toFixed(2)}%</td>
+          <td>CVaR 95% daily</td><td class="neg">${s.cvar_95_daily.toFixed(2)}%</td>
+        </tr><tr>
+          <td>Max Drawdown</td><td class="neg">${s.max_drawdown.toFixed(2)}%</td>
+          <td>Win Rate</td><td>${s.win_rate.toFixed(1)}%</td>
+        </tr><tr>
+          <td>Autocorr (lag-1)</td><td>${s.autocorr_1.toFixed(3)}</td>
+          <td>IQR</td><td>${(s.p75 - s.p25).toFixed(3)}%</td>
+        </tr>
+      </table>`;
+    grid.appendChild(card);
+
+    // Histogram with Plotly
+    const binCenters = s.hist_edges.slice(0, -1).map((e, i) => (e + s.hist_edges[i + 1]) / 2);
+    const barColors  = binCenters.map(c => c < 0 ? "rgba(239,68,68,0.75)" : "rgba(59,130,246,0.75)");
+    Plotly.react(`shist-${sym}`, [{
+      type: "bar", x: binCenters, y: s.hist_counts,
+      marker: { color: barColors, line: { width: 0 } },
+      hovertemplate: "%{x:.2f}% : %{y} days<extra></extra>",
+    }], {
+      paper_bgcolor: "transparent", plot_bgcolor: "transparent",
+      margin: { l: 32, r: 8, t: 6, b: 28 },
+      bargap: 0.04,
+      xaxis: { color: "#718096", tickfont: { size: 9 }, title: { text: "Daily Return (%)", font: { size: 9, color: "#718096" } } },
+      yaxis: { color: "#718096", tickfont: { size: 9 } },
+      font:  { color: "#94a3b8", size: 9 },
+      shapes: [{ type: "line", x0: 0, x1: 0, y0: 0, y1: 1, xref: "x", yref: "paper",
+                 line: { color: "#f59e0b", width: 1.5, dash: "dash" } }],
+      annotations: [{
+        x: s.mean_daily, y: 1, xref: "x", yref: "paper", showarrow: false,
+        text: "μ", font: { color: "#06b6d4", size: 10 }, yanchor: "bottom",
+      }],
+    }, { responsive: true, displayModeBar: false });
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════ SUB-TABS
 function switchSubTab(name) {
   document.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
@@ -628,6 +719,7 @@ function renderResults(data, method) {
     methodNa.style.display = "block";
   }
 
+  renderStatsPanel(data.descriptive_stats || {}, data.weights || {});
   switchSubTab('overview');
 }
 
@@ -1079,6 +1171,7 @@ async function runStressTest() {
     });
     const data = await res.json();
     if (data.error) { alert(data.error); return; }
+    p.lastStressResults = data.scenarios;   // store for PDF export
     renderStressResults(data.scenarios);
   } catch(e) { alert("Error: " + e.message); }
   finally { btn.disabled = false; btn.textContent = "▶ Run Stress Test"; }
@@ -1290,13 +1383,75 @@ function downloadNotebook() {
 }
 
 // ═══════════════════════════════════════════════════════════════════ DOWNLOAD PDF
-function downloadPDF() {
+async function downloadPDF() {
   const p = activeProject();
   if (!p?.results) return;
-  const prev = document.title;
-  document.title = p.name + " — PortOpt Report";
-  window.print();
-  document.title = prev;
+
+  // Find the button and show progress
+  const btn = document.querySelector('.export-actions .btn:last-child') ||
+              document.querySelector('[onclick="downloadPDF()"]');
+  const origText = btn ? btn.innerHTML : "";
+  if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating…"; }
+
+  try {
+    // Capture rendered Plotly chart images as base64 PNG
+    const chartIds = [
+      "chart-alloc", "chart-returns", "chart-drawdown", "chart-rolling",
+      "chart-corr", "chart-frontier",
+      "chart-montecarlo",
+      "chart-bl-step1", "chart-bl-step5",
+      "chart-hrp-step3",
+    ];
+    const charts = {};
+    for (const id of chartIds) {
+      const el = document.getElementById(id);
+      if (el && el._fullLayout) {
+        try {
+          charts[id] = await Plotly.toImage(el, { format: "png", width: 900, height: 380 });
+        } catch (_) { /* chart not rendered yet */ }
+      }
+    }
+
+    const settings = {
+      start: document.getElementById("start-date").value,
+      end:   document.getElementById("end-date").value,
+      rfr:   parseFloat(document.getElementById("rfr").value) / 100,
+    };
+
+    const payload = {
+      portfolio_name:   p.name,
+      weights:          p.results.weights,
+      analytics:        p.results.analytics,
+      descriptive_stats: p.results.descriptive_stats || {},
+      method:           p.settings?.method || "unknown",
+      settings,
+      stress_results:   p.lastStressResults || {},
+      charts,
+    };
+
+    const res = await fetch("/api/export-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${p.name.replace(/\s+/g, "_")}_portopt_report.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("PDF generation failed: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════ INIT

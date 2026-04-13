@@ -4,7 +4,7 @@ import warnings
 import logging
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, jarque_bera
 from pypfopt import EfficientFrontier
 
 # Suppress solver noise only from these specific modules
@@ -251,6 +251,70 @@ def apply_overrides(
                 S.loc[sym, :] *= scale
                 S.loc[:, sym] *= scale
     return mu, S
+
+
+def compute_descriptive_stats(prices: pd.DataFrame) -> dict:
+    """Per-stock descriptive statistics: distribution, moments, risk, normality."""
+    result = {}
+    for col in prices.columns:
+        series = prices[col].dropna()
+        if len(series) < 20:
+            continue
+        rets = series.pct_change().dropna() * 100  # daily returns in %
+        n = len(rets)
+
+        # Histogram (40 bins, balanced around 0)
+        counts, edges = np.histogram(rets, bins=40)
+
+        # Normality: Jarque-Bera test
+        jb_stat, jb_pval = jarque_bera(rets)
+
+        # Autocorrelation lag-1
+        autocorr1 = float(rets.autocorr(lag=1)) if n > 5 else 0.0
+
+        # Historical VaR / CVaR (daily, %)
+        var_95 = float(np.percentile(rets, 5))
+        tail = rets[rets <= var_95]
+        cvar_95 = float(tail.mean()) if len(tail) > 0 else var_95
+
+        # Per-stock drawdown
+        cum = (1 + rets / 100).cumprod()
+        peak = cum.cummax()
+        dd = (cum - peak) / peak
+        max_dd = float(dd.min()) * 100
+
+        # Annualised
+        ann_ret = float((1 + rets / 100).prod() ** (TRADING_DAYS / n) - 1) * 100
+        ann_vol = float(rets.std() * np.sqrt(TRADING_DAYS))
+        sharpe = ann_ret / ann_vol if ann_vol > 0 else 0.0
+
+        result[col] = {
+            "n_obs":         n,
+            "mean_daily":    round(float(rets.mean()), 4),
+            "median_daily":  round(float(rets.median()), 4),
+            "std_daily":     round(float(rets.std()), 4),
+            "skewness":      round(float(rets.skew()), 4),
+            "kurtosis":      round(float(rets.kurtosis()), 4),  # excess kurtosis
+            "min_daily":     round(float(rets.min()), 4),
+            "max_daily":     round(float(rets.max()), 4),
+            "p5":            round(float(rets.quantile(0.05)), 4),
+            "p25":           round(float(rets.quantile(0.25)), 4),
+            "p75":           round(float(rets.quantile(0.75)), 4),
+            "p95":           round(float(rets.quantile(0.95)), 4),
+            "ann_return":    round(ann_ret, 4),
+            "ann_vol":       round(ann_vol, 4),
+            "sharpe":        round(sharpe, 4),
+            "max_drawdown":  round(max_dd, 4),
+            "win_rate":      round(float((rets > 0).sum() / n * 100), 2),
+            "autocorr_1":    round(autocorr1, 4),
+            "jb_pvalue":     round(float(jb_pval), 6),
+            "jb_normal":     bool(jb_pval > 0.05),
+            "var_95_daily":  round(var_95, 4),
+            "cvar_95_daily": round(cvar_95, 4),
+            "hist_counts":   counts.tolist(),
+            "hist_edges":    [round(float(e), 4) for e in edges.tolist()],
+        }
+    return result
 
 
 def generate_frontier(

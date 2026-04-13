@@ -11,7 +11,7 @@ from pypfopt import EfficientFrontier, risk_models, expected_returns, BlackLitte
 from scipy.optimize import minimize
 
 from services.data import fetch_prices, fetch_benchmark, BENCHMARK, TRADING_DAYS
-from services.analytics import compute_risk_metrics, apply_overrides, generate_frontier
+from services.analytics import compute_risk_metrics, apply_overrides, generate_frontier, compute_descriptive_stats
 
 logger = logging.getLogger(__name__)
 optimize_bp = Blueprint("optimize", __name__)
@@ -189,7 +189,9 @@ def optimize():
             cleaned = ef.clean_weights()
 
         analytics = compute_risk_metrics(cleaned, prices, rfr, bench_prices)
-        resp = {"weights": dict(cleaned), "analytics": analytics, "frontier": frontier}
+        descriptive_stats = compute_descriptive_stats(prices)
+        resp = {"weights": dict(cleaned), "analytics": analytics, "frontier": frontier,
+                "descriptive_stats": descriptive_stats}
         if frontier_bl:
             resp["frontier_bl"] = frontier_bl
         if bl_info:
@@ -382,7 +384,9 @@ def analyze():
         prices = fetch_prices(tickers, start_date, end_date)
         bench = fetch_benchmark(start_date, end_date)
         analytics = compute_risk_metrics(active_w, prices, rfr, bench)
-        return jsonify({"weights": active_w, "analytics": analytics})
+        descriptive_stats = compute_descriptive_stats(prices)
+        return jsonify({"weights": active_w, "analytics": analytics,
+                        "descriptive_stats": descriptive_stats})
     except ValueError as e:
         return _bad(str(e))
     except Exception as e:
