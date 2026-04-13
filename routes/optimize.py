@@ -7,11 +7,13 @@ import numpy as np
 import yfinance as yf
 import pandas as pd
 from flask import Blueprint, request, jsonify
-from pypfopt import EfficientFrontier, risk_models, expected_returns, BlackLittermanModel
-from scipy.optimize import minimize
 
 from services.data import fetch_prices, fetch_benchmark, BENCHMARK, TRADING_DAYS
 from services.analytics import compute_risk_metrics, apply_overrides, generate_frontier, compute_descriptive_stats
+
+def _pypfopt():
+    from pypfopt import EfficientFrontier, risk_models, expected_returns, BlackLittermanModel
+    return EfficientFrontier, risk_models, expected_returns, BlackLittermanModel
 
 logger = logging.getLogger(__name__)
 optimize_bp = Blueprint("optimize", __name__)
@@ -87,6 +89,7 @@ def stock_data():
     if not start_date or not end_date:
         return _bad("start_date and end_date are required.")
     try:
+        EfficientFrontier, risk_models, expected_returns, BlackLittermanModel = _pypfopt()
         prices = fetch_prices(tickers, start_date, end_date)
         result = {}
         for sym in prices.columns:
@@ -136,6 +139,7 @@ def optimize():
         return _bad(f"Invalid method. Choose from: {', '.join(sorted(VALID_METHODS))}")
 
     try:
+        EfficientFrontier, risk_models, expected_returns, BlackLittermanModel = _pypfopt()
         rfr = float(data.get("risk_free_rate", 0.04))
         min_w = float(data.get("min_weight", 0.0))
         max_w = float(data.get("max_weight", 1.0))
@@ -207,6 +211,7 @@ def optimize():
 
 
 def _run_black_litterman(data, available, mu, S, weight_bounds, rfr):
+    EfficientFrontier, risk_models, expected_returns, BlackLittermanModel = _pypfopt()
     views_data = data.get("views", {})
     market_caps = data.get("market_caps", {})
     tau = float(data.get("tau", 0.05))
@@ -289,6 +294,7 @@ def _run_black_litterman(data, available, mu, S, weight_bounds, rfr):
 
 
 def _run_risk_parity(available, S, weight_bounds):
+    from scipy.optimize import minimize
     n = len(available)
     cov_arr = S.values
 

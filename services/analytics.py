@@ -4,16 +4,25 @@ import warnings
 import logging
 import numpy as np
 import pandas as pd
-from scipy.stats import norm, jarque_bera
-from pypfopt import EfficientFrontier
-
-# Suppress solver noise only from these specific modules
-warnings.filterwarnings("ignore", category=UserWarning, module="cvxpy")
-warnings.filterwarnings("ignore", category=FutureWarning, module="pypfopt")
 
 from .data import TRADING_DAYS
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_ppf(q: float) -> float:
+    try:
+        from scipy.stats import norm
+        return float(norm.ppf(q))
+    except Exception:
+        # Rational approximation fallback (Beasley-Springer-Moro)
+        import math
+        p = q if q > 0.5 else 1 - q
+        t = math.sqrt(-2 * math.log(1 - p))
+        c = [2.515517, 0.802853, 0.010328]
+        d = [1.432788, 0.189269, 0.001308]
+        x = t - (c[0] + c[1]*t + c[2]*t*t) / (1 + d[0]*t + d[1]*t*t + d[2]*t*t*t)
+        return x if q > 0.5 else -x
 
 
 def compute_risk_metrics(
@@ -50,8 +59,8 @@ def compute_risk_metrics(
 
     daily_mean = float(port_rets.mean())
     daily_std = float(port_rets.std())
-    param_var_95 = float(-(daily_mean * TRADING_DAYS + norm.ppf(0.05) * daily_std * np.sqrt(TRADING_DAYS)))
-    param_var_99 = float(-(daily_mean * TRADING_DAYS + norm.ppf(0.01) * daily_std * np.sqrt(TRADING_DAYS)))
+    param_var_95 = float(-(daily_mean * TRADING_DAYS + _norm_ppf(0.05) * daily_std * np.sqrt(TRADING_DAYS)))
+    param_var_99 = float(-(daily_mean * TRADING_DAYS + _norm_ppf(0.01) * daily_std * np.sqrt(TRADING_DAYS)))
 
     # ── Drawdown ───────────────────────────────────────────────────────────────
     cum = (1 + port_rets).cumprod()
@@ -267,7 +276,17 @@ def compute_descriptive_stats(prices: pd.DataFrame) -> dict:
         counts, edges = np.histogram(rets, bins=40)
 
         # Normality: Jarque-Bera test
-        jb_stat, jb_pval = jarque_bera(rets)
+        try:
+            from scipy.stats import jarque_bera as _jb
+            jb_stat, jb_pval = _jb(rets)
+        except Exception:
+            # Fallback: compute JB manually from moments
+            n2 = len(rets)
+            sk = float(rets.skew())
+            ku = float(rets.kurtosis())
+            jb_stat = n2 / 6 * (sk**2 + ku**2 / 4)
+            import math
+            jb_pval = math.exp(-0.5 * jb_stat) if jb_stat < 700 else 0.0
 
         # Autocorrelation lag-1
         autocorr1 = float(rets.autocorr(lag=1)) if n > 5 else 0.0
@@ -325,6 +344,7 @@ def generate_frontier(
     n_points: int = 50,
 ) -> dict:
     """Compute the efficient frontier curve; falls back to grid scan on CLA failure."""
+    from pypfopt import EfficientFrontier
     try:
         from pypfopt.cla import CLA
         cla = CLA(mu, S, weight_bounds=weight_bounds)
