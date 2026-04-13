@@ -1,4 +1,4 @@
-"""PDF report generation — reportlab layout, matplotlib formulas, Gemini AI text."""
+"""PDF report generation — reportlab layout, Gemini AI text via REST API."""
 
 import io
 import os
@@ -99,16 +99,19 @@ Write a professional financial analysis report in JSON with these exact keys:
 Use precise financial language, reference actual numbers, and write in academic tone. Return only valid JSON."""
 
     def _call():
+        import requests as _req
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={api_key}"
+        )
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.4},
+        }
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            resp = model.generate_content(
-                prompt,
-                generation_config={"max_output_tokens": 2048, "temperature": 0.4},
-            )
-            text = resp.text.strip()
-            # Strip markdown fences if present
+            r = _req.post(url, json=body, timeout=18)
+            r.raise_for_status()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
             if text.startswith("```"):
                 text = text.split("```", 2)[1]
                 if text.startswith("json"):
@@ -116,7 +119,7 @@ Use precise financial language, reference actual numbers, and write in academic 
                 text = text.rsplit("```", 1)[0]
             return json.loads(text.strip())
         except Exception:
-            logger.warning("Gemini call failed: %s", traceback.format_exc())
+            logger.warning("Gemini REST call failed: %s", traceback.format_exc())
             return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -190,30 +193,38 @@ def _decode_chart(url: str | None) -> io.BytesIO | None:
         return None
 
 
-def _formula_image(latex: str, fig_w_in: float = 6.2) -> bytes | None:
-    """Render a LaTeX formula string to PNG bytes via matplotlib mathtext."""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+def _latex_to_readable(latex: str) -> str:
+    """Convert a LaTeX string to a human-readable Unicode approximation."""
+    import re
+    s = latex
+    # Common substitutions — order matters
+    s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"(\1) / (\2)", s)
+    s = re.sub(r"\\sqrt\{([^}]+)\}", r"√(\1)", s)
+    s = s.replace(r"\mathbf{1}", "𝟏").replace(r"\mathbf{w}", "𝐰")
+    s = s.replace(r"\mathbf", "").replace(r"\boldsymbol", "")
+    s = s.replace(r"\Sigma", "Σ").replace(r"\sigma", "σ").replace(r"\mu", "μ")
+    s = s.replace(r"\alpha", "α").replace(r"\beta", "β").replace(r"\pi", "π")
+    s = s.replace(r"\tau", "τ").replace(r"\lambda", "λ").replace(r"\omega", "ω")
+    s = s.replace(r"\Omega", "Ω").replace(r"\Pi", "Π").replace(r"\gamma", "γ")
+    s = s.replace(r"\chi", "χ").replace(r"\rho", "ρ").replace(r"\Delta", "Δ")
+    s = s.replace(r"\mathcal{N}", "𝒩").replace(r"\text{", "").replace(r"\quad", "   ")
+    s = re.sub(r"\^(\{[^}]+\}|[^\s{])", lambda m: _superscript(m.group(1).strip("{}")), s)
+    s = re.sub(r"_(\{[^}]+\}|[^\s{])",  lambda m: _subscript(m.group(1).strip("{}")),   s)
+    s = re.sub(r"\\[a-zA-Z]+", "", s)   # remove remaining commands
+    s = re.sub(r"[{}]", "", s)
+    return s.strip()
 
-        fig = plt.figure(figsize=(fig_w_in, 0.72))
-        fig.patch.set_facecolor("#eef4fd")
-        ax = fig.add_axes([0.01, 0.05, 0.98, 0.90])
-        ax.set_facecolor("#eef4fd")
-        ax.axis("off")
-        ax.text(0.5, 0.5, f"${latex}$",
-                transform=ax.transAxes, ha="center", va="center",
-                fontsize=12, color=C_NAVY, math_fontfamily="stix")
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=140, bbox_inches="tight",
-                    facecolor="#eef4fd", pad_inches=0.08)
-        plt.close(fig)
-        buf.seek(0)
-        return buf.read()
-    except Exception:
-        logger.debug("Formula render failed: %s", traceback.format_exc())
-        return None
+
+_SUP = str.maketrans("0123456789+-=()nTpfmkd", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿᵀᵖᶠᵐᵏᵈ")
+_SUB = str.maketrans("0123456789aefijklmnoprstuvxyz+-=()", "₀₁₂₃₄₅₆₇₈₉ₐₑ_ᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ_₊₋₌₍₎")
+
+
+def _superscript(s: str) -> str:
+    return s.translate(_SUP)
+
+
+def _subscript(s: str) -> str:
+    return s.translate(_SUB)
 
 
 def _make_styles():
@@ -281,28 +292,16 @@ def _section_heading(num: int, title: str, styles: dict) -> list:
 
 
 def _formula_block(latex: str, label: str, counter: list, styles: dict,
-                   text_w_pts: float) -> list:
-    """Render a formula. counter is a mutable [int] used for equation numbering."""
-    from reportlab.platypus import Paragraph, Spacer, Image
-    from reportlab.lib.units import cm, inch
+                   text_w_pts: float = 0) -> list:
+    """Render a numbered equation as a styled Unicode text block."""
+    from reportlab.platypus import Paragraph
 
     counter[0] += 1
-    eq_num = counter[0]
-    items = [Paragraph(f"Equation {eq_num}: {label}", styles["formula_label"])]
-
-    fig_w_in = text_w_pts * 0.72 / 72.0  # 72pt per inch
-    png = _formula_image(latex, fig_w_in=min(fig_w_in, 6.2))
-    if png:
-        aspect = fig_w_in / 0.72
-        img_w = text_w_pts * 0.72
-        img_h = img_w / aspect
-        items.append(Image(io.BytesIO(png), width=img_w, height=img_h))
-    else:
-        # Fallback: styled text
-        safe = (latex.replace(r"\frac", "").replace(r"\left", "")
-                     .replace(r"\right", "").replace(r"\text", ""))
-        items.append(Paragraph(safe, styles["formula_alt"]))
-    return items
+    readable = _latex_to_readable(latex)
+    return [
+        Paragraph(f"Equation {counter[0]}: {label}", styles["formula_label"]),
+        Paragraph(readable, styles["formula_alt"]),
+    ]
 
 
 def _embed_chart(chart_buf: io.BytesIO | None, fig_num: list,
@@ -373,7 +372,7 @@ def _build_cover(req: dict, styles: dict, text_w: float) -> list:
     story.append(Paragraph("PortOpt", styles["cover_title"]))
     story.append(Paragraph("Interactive Portfolio Optimization", styles["cover_sub"]))
     story.append(HRFlowable(width="100%", thickness=1.5, color=HexColor(C_CYAN), spaceAfter=14))
-    story.append(Paragraph("Portfolio Analysis Report", ParagraphStyle_bold(18, C_NAVY)))
+    story.append(_bold_para("Portfolio Analysis Report", 18, C_NAVY))
     story.append(Spacer(1, 0.5 * cm))
 
     # Metadata table
@@ -417,17 +416,6 @@ def _build_cover(req: dict, styles: dict, text_w: float) -> list:
     return story
 
 
-def ParagraphStyle_bold(size: int, colour: str) -> "Paragraph":
-    """Quick inline bold Paragraph."""
-    from reportlab.platypus import Paragraph
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.colors import HexColor
-    sty = ParagraphStyle("_bold", fontName="Helvetica-Bold", fontSize=size,
-                         textColor=HexColor(colour), spaceAfter=4)
-    return Paragraph("", sty)   # placeholder — caller replaces
-
-
-# Need a real helper
 def _bold_para(text: str, size: int, colour: str) -> "Paragraph":
     from reportlab.platypus import Paragraph
     from reportlab.lib.styles import ParagraphStyle
@@ -512,8 +500,7 @@ def _build_overview(req: dict, ai: dict, styles: dict, charts: dict,
         c = contrib.get(sym, {})
         rows.append((sym, f"{w*100:.2f}", f"{c.get('ann_return','—')}", f"{c.get('ann_vol','—')}",
                      f"{c.get('risk_contrib_pct','—')}", "n"))
-    from reportlab.platypus import Table as RLTable, TableStyle as RLTS, Paragraph as RLP
-    col_w = [text_w * x for x in [0.13, 0.14, 0.20, 0.20, 0.22, 0.0]]  # last col hidden
+    from reportlab.platypus import Table as RLTable
     # Rebuild as proper table
     tbl_data = []
     hdr = [Paragraph(h, styles["tbl_head"]) for h in ("Ticker","Weight (%)","Ann Return","Ann Vol","Risk Contrib")]
@@ -542,12 +529,10 @@ def _build_overview(req: dict, ai: dict, styles: dict, charts: dict,
 
 def _build_performance(req: dict, ai: dict, styles: dict, charts: dict,
                        fig_num: list, eq_num: list, text_w: float) -> list:
-    from reportlab.platypus import Spacer
+    from reportlab.platypus import Paragraph, Spacer
     metrics = req.get("analytics", {}).get("metrics", {})
     story   = _section_heading(2, "Historical Performance", styles)
-    story  += [Paragraph(ai.get("performance", ""), styles["body"])]  # noqa: Paragraph imported via wildcard
-
-    from reportlab.platypus import Paragraph
+    story  += [Paragraph(ai.get("performance", ""), styles["body"])]
     story += _embed_chart(_decode_chart(charts.get("chart-returns")), fig_num,
         "Cumulative returns: each asset normalised to $1 at the start date "
         "(bold white line = portfolio blend; grey dashed = SPY benchmark).",
