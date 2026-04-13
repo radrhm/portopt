@@ -4,20 +4,6 @@
    All calculations client-side; only data fetch hits the server.
    ═══════════════════════════════════════════════════════════════ */
 
-// ── App switcher ──────────────────────────────────────────────────────────────
-
-function switchApp(mode) {
-  const isVal = mode === 'valuation';
-  document.getElementById('nav-portfolio').classList.toggle('active', !isVal);
-  document.getElementById('nav-valuation').classList.toggle('active',  isVal);
-  // Hide/show portfolio panels
-  document.querySelector('aside').style.display         = isVal ? 'none' : '';
-  document.querySelector('main').style.display          = isVal ? 'none' : '';
-  document.querySelector('.app-tabs-row').style.display = isVal ? 'none' : '';
-  // Show valuation as grid (it sits at grid-row:2/-1, grid-column:1/-1, covering everything below header)
-  document.getElementById('valuation-app').style.display = isVal ? 'grid' : 'none';
-}
-
 // ── State: map tickerKey → { data, id } ──────────────────────────────────────
 const _vStocks = {};   // { AAPL: { data: {...}, id: 'vs-AAPL' }, ... }
 let   _vActive = null; // currently shown ticker key
@@ -773,5 +759,7 @@ function _setUD(id, intrinsic, price) {
   const pct = ((intrinsic - price) / price) * 100;
   const up  = pct >= 0;
   el.className = `val-updown ${up ? 'up' : 'down'}`;
-  el.innerHTML = `${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% ${up?'upside':'downside'} &nbsp;·&nbsp; Intrinsic ${_fp(intrinsic, _vStocks[_vActive]?.data?.currency||'USD')} vs market ${_fp(price, _vStocks[_vActive]?.data?.currency||'USD')}`;
+  // derive currency from any loaded stock (all share same currency assumption)
+  const cur = Object.values(_vStocks).find(s=>s.data)?.data?.currency || 'USD';
+  el.innerHTML = `${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% ${up?'upside':'downside'} &nbsp;·&nbsp; Intrinsic ${_fp(intrinsic, cur)} vs market ${_fp(price, cur)}`;
 }

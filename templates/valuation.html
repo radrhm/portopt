@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PortOpt — Equity Valuation</title>
+<link rel="icon" type="image/png" href="/static/favicon.png"/>
+<link rel="stylesheet" href="/static/css/app.css"/>
+<link rel="stylesheet" href="/static/css/valuation.css"/>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+</head>
+<body>
+<div class="val-app">
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
+<div class="app-header-top">
+  <img src="/static/favicon.png" alt="PortOpt" style="width:28px;height:28px;border-radius:6px;flex-shrink:0;"/>
+  <div>
+    <div class="logo">PortOpt</div>
+    <div class="logo-sub">Investment Analysis Platform</div>
+  </div>
+  <nav class="app-nav">
+    <a class="app-nav-btn" href="/">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      Portfolio Optimization
+    </a>
+    <a class="app-nav-btn active" href="/valuation">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Equity Valuation
+    </a>
+  </nav>
+</div>
+
+<!-- ══ STOCK TABS + SEARCH ROW ══════════════════════════════════════════ -->
+<div class="val-tabs-row" id="val-tabs-row">
+  <div id="val-tabs-container" style="display:flex;align-items:stretch;flex:1;overflow-x:auto;min-width:0;"></div>
+  <div class="val-search-inline">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         style="color:var(--muted);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="val-ticker-input" placeholder="Add ticker…"
+           autocomplete="off" spellcheck="false"
+           onkeydown="if(event.key==='Enter')valAddStock()"/>
+    <button class="btn btn-primary btn-sm" onclick="valAddStock()" id="val-search-btn">Add</button>
+    <span id="val-status" style="font-size:11px;color:var(--red);margin-left:6px;white-space:nowrap;"></span>
+  </div>
+</div>
+
+<!-- ══ MAIN SCROLLABLE AREA ══════════════════════════════════════════════ -->
+<div class="val-body" id="val-stocks-container">
+
+  <!-- Empty state -->
+  <div id="val-empty-state" style="text-align:center;padding:100px 20px;color:var(--muted);">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"
+         style="display:block;margin:0 auto 18px;opacity:.18;">
+      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+    </svg>
+    <div style="font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;">Equity Valuation</div>
+    <div style="font-size:13px;max-width:420px;margin:0 auto;line-height:1.8;color:var(--muted);">
+      Enter a ticker symbol above and click <strong style="color:var(--text);">Add</strong>
+      to fetch financials and run 9 valuation models across 4 categories.
+      You can analyse multiple stocks in parallel using separate tabs.
+    </div>
+  </div>
+
+</div><!-- /val-body -->
+
+</div><!-- /val-app -->
+
+<script src="/static/js/valuation.js"></script>
+</body>
+</html>

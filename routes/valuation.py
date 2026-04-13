@@ -1,8 +1,13 @@
-"""Equity valuation API routes."""
+"""Equity valuation routes — page + API."""
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 
 valuation_bp = Blueprint("valuation", __name__)
+
+
+@valuation_bp.route("/valuation")
+def valuation_page():
+    return render_template("valuation.html")
 
 
 @valuation_bp.route("/api/valuation/financials")
