@@ -10,11 +10,12 @@ function switchApp(mode) {
   const isVal = mode === 'valuation';
   document.getElementById('nav-portfolio').classList.toggle('active', !isVal);
   document.getElementById('nav-valuation').classList.toggle('active',  isVal);
+  // Hide/show portfolio panels
   document.querySelector('aside').style.display         = isVal ? 'none' : '';
   document.querySelector('main').style.display          = isVal ? 'none' : '';
   document.querySelector('.app-tabs-row').style.display = isVal ? 'none' : '';
-  const va = document.getElementById('valuation-app');
-  va.style.display = isVal ? 'grid' : 'none';
+  // Show valuation as grid (it sits at grid-row:2/-1, grid-column:1/-1, covering everything below header)
+  document.getElementById('valuation-app').style.display = isVal ? 'grid' : 'none';
 }
 
 // ── State: map tickerKey → { data, id } ──────────────────────────────────────

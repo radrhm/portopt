@@ -305,8 +305,8 @@ input:focus,select:focus{border-color:var(--accent);}
 .app-nav-btn.active{background:var(--accent);color:#fff;}
 
 /* ── VALUATION SHELL ─────────────────────────────────────────── */
-#valuation-app{display:none;grid-column:1/-1;height:calc(100vh - 84px);
-  display:grid;grid-template-rows:auto 1fr;overflow:hidden;}
+#valuation-app{display:none;grid-column:1/-1;grid-row:2/-1;
+  grid-template-rows:auto 1fr;overflow:hidden;background:var(--bg);}
 
 /* ── STOCK TABS ROW ──────────────────────────────────────────── */
 .val-tabs-row{display:flex;align-items:stretch;background:#0d1626;
