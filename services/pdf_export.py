@@ -215,8 +215,25 @@ def _latex_to_readable(latex: str) -> str:
     return s.strip()
 
 
-_SUP = str.maketrans("0123456789+-=()nTpfmkd", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿᵀᵖᶠᵐᵏᵈ")
-_SUB = str.maketrans("0123456789aefijklmnoprstuvxyz+-=()", "₀₁₂₃₄₅₆₇₈₉ₐₑ_ᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ_₊₋₌₍₎")
+_SUP = {
+    ord('0'): '\u2070', ord('1'): '\u00b9', ord('2'): '\u00b2', ord('3'): '\u00b3',
+    ord('4'): '\u2074', ord('5'): '\u2075', ord('6'): '\u2076', ord('7'): '\u2077',
+    ord('8'): '\u2078', ord('9'): '\u2079', ord('+'): '\u207a', ord('-'): '\u207b',
+    ord('='): '\u207c', ord('('): '\u207d', ord(')'): '\u207e', ord('n'): '\u207f',
+    ord('T'): '\u1d40', ord('p'): '\u1d56', ord('f'): '\u1da0', ord('m'): '\u1d50',
+    ord('k'): '\u1d4f', ord('d'): '\u1d48',
+}
+_SUB = {
+    ord('0'): '\u2080', ord('1'): '\u2081', ord('2'): '\u2082', ord('3'): '\u2083',
+    ord('4'): '\u2084', ord('5'): '\u2085', ord('6'): '\u2086', ord('7'): '\u2087',
+    ord('8'): '\u2088', ord('9'): '\u2089', ord('a'): '\u2090', ord('e'): '\u2091',
+    ord('f'): 'f',      ord('i'): '\u1d62', ord('j'): '\u2c7c', ord('k'): '\u2096',
+    ord('l'): '\u2097', ord('m'): '\u2098', ord('n'): '\u2099', ord('o'): '\u2092',
+    ord('p'): '\u209a', ord('r'): '\u1d63', ord('s'): '\u209b', ord('t'): '\u209c',
+    ord('u'): '\u1d64', ord('v'): '\u1d65', ord('x'): '\u2093', ord('y'): 'y',
+    ord('z'): 'z',      ord('+'): '\u208a', ord('-'): '\u208b', ord('='): '\u208c',
+    ord('('): '\u208d', ord(')'): '\u208e',
+}
 
 
 def _superscript(s: str) -> str:
