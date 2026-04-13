@@ -13,6 +13,7 @@
 
 <!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
 <div class="app-header-top">
+  <img src="/static/favicon.png" alt="PortOpt" style="width:28px;height:28px;border-radius:6px;flex-shrink:0;"/>
   <div>
     <div class="logo">PortOpt</div>
     <div class="logo-sub">Interactive Portfolio Optimization</div>
@@ -154,191 +155,236 @@
     <div class="error-box" id="error-msg"></div>
   </div>
   <div id="state-results" style="display:none;">
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-label">Expected Return</div>
-        <div class="metric-val green" id="m-ret">—</div>
-        <div class="metric-sub">Annualized</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Volatility</div>
-        <div class="metric-val cyan" id="m-vol">—</div>
-        <div class="metric-sub">Annualized Std Dev</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Sharpe Ratio</div>
-        <div class="metric-val gold" id="m-sharpe">—</div>
-        <div class="metric-sub">Risk-Adjusted Return</div>
+
+    <!-- Sub-tabs bar (sticky within main scroll) -->
+    <div class="sub-tabs-bar">
+      <button class="sub-tab active" data-tab="overview" onclick="switchSubTab('overview')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Overview
+      </button>
+      <button class="sub-tab" data-tab="performance" onclick="switchSubTab('performance')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        Performance
+      </button>
+      <button class="sub-tab" data-tab="risk" onclick="switchSubTab('risk')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Risk
+      </button>
+      <button class="sub-tab" data-tab="method" onclick="switchSubTab('method')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Method
+      </button>
+      <button class="sub-tab" data-tab="scenarios" onclick="switchSubTab('scenarios')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        Scenarios
+      </button>
+      <div class="sub-tab-spacer"></div>
+      <div class="export-actions">
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="Export weights &amp; metrics as CSV">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CSV
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadNotebook()" title="Download Jupyter Notebook">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Notebook
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadPDF()" title="Save as PDF">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PDF
+        </button>
       </div>
     </div>
 
-    <div class="charts-grid">
-      <div class="chart-card full">
-        <div class="chart-header">
-          <div class="chart-title" style="margin:0;">Historical Cumulative Returns</div>
-          <div class="section-actions">
-            <button class="btn btn-ghost btn-sm" onclick="exportCSV()" title="Export weights & metrics as CSV">⬇ CSV</button>
-            <button class="btn btn-ghost btn-sm" onclick="downloadNotebook()" title="Download Jupyter Notebook">⬇ Notebook</button>
-            <button class="btn btn-ghost btn-sm" onclick="downloadPDF()" title="Save as PDF">⬇ PDF</button>
-          </div>
+    <!-- ── OVERVIEW ─────────────────────────────────────────────── -->
+    <div class="sub-panel active" id="panel-overview">
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Expected Return</div>
+          <div class="metric-val green" id="m-ret">—</div>
+          <div class="metric-sub">Annualized</div>
         </div>
-        <div class="chart-desc">Tracks how $1 invested at the start would have grown for each asset and the blended portfolio (bold white line). The dotted grey line is the SPY benchmark. Hover to compare returns on any date.</div>
-        <div id="chart-returns" style="height:260px;"></div>
-      </div>
-    </div>
-
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card full">
-        <div class="chart-title">Portfolio Drawdown</div>
-        <div class="chart-desc">Percentage decline from the most recent portfolio peak at each point in time. A drawdown of −20% means the portfolio was 20% below its prior high. Shallower and shorter drawdowns indicate better downside protection.</div>
-        <div id="chart-drawdown" style="height:180px;"></div>
-      </div>
-    </div>
-
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card full">
-        <div class="chart-header">
-          <div class="chart-title" style="margin:0;">Rolling Metrics</div>
-          <div style="display:flex;gap:5px;" id="rolling-win-btns">
-            <button class="win-btn" onclick="setRollingWindow(30)">30d</button>
-            <button class="win-btn active" onclick="setRollingWindow(60)">60d</button>
-            <button class="win-btn" onclick="setRollingWindow(90)">90d</button>
-            <button class="win-btn" onclick="setRollingWindow(180)">180d</button>
-          </div>
+        <div class="metric-card">
+          <div class="metric-label">Volatility</div>
+          <div class="metric-val cyan" id="m-vol">—</div>
+          <div class="metric-sub">Annualized Std Dev</div>
         </div>
-        <div class="chart-desc">Shows how volatility (blue, left axis) and the Sharpe ratio (gold, right axis) evolved through the selected period using a sliding window. A rising Sharpe with falling volatility signals consistently improving risk-adjusted performance.</div>
-        <div id="chart-rolling" style="height:240px;"></div>
-      </div>
-    </div>
-
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card full">
-        <div class="chart-title">Correlation Matrix</div>
-        <div class="chart-desc">Pairwise correlation of daily returns between each asset (−1 to +1). Dark red = move in opposite directions (great diversification), dark green = move together (concentration risk). Aim for a mix of low or negative correlations to reduce portfolio volatility.</div>
-        <div id="chart-corr" style="height:320px;"></div>
-      </div>
-    </div>
-
-    <div class="charts-grid" id="method-graph-container" style="margin-top:14px;">
-      <div class="chart-card full" id="frontier-card">
-        <div class="chart-title">Efficient Frontier</div>
-        <div class="chart-desc">Each point on the blue curve is a possible portfolio — the curve shows the maximum return achievable for each level of risk. The gold star is your optimal portfolio. The green dashed line (Capital Allocation Line) shows the best risk/reward trade-off including a risk-free asset.</div>
-        <div id="chart-frontier" style="height:350px;"></div>
-      </div>
-    </div>
-
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card full">
-        <div class="chart-title">Risk &amp; Performance Metrics</div>
-        <div class="chart-desc">Comprehensive breakdown across four groups: Performance (return, Sharpe, Sortino), Drawdown &amp; Tail (worst losses, duration), Value at Risk (probability-based daily loss estimates), and Benchmark (how the portfolio compares to SPY on beta, alpha, and tracking).</div>
-        <div id="metrics-detail"></div>
-      </div>
-    </div>
-
-    <div id="academic-bl-results" style="display:none;margin-top:14px;">
-      <div class="charts-grid">
-        <div class="chart-card">
-          <div class="chart-title">Step 1: Market Equilibrium (Implied Returns)</div>
-          <div id="chart-bl-step1" style="height:320px;"></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Steps 3 &amp; 4: Investor Views &amp; Conviction</div>
-          <div id="chart-bl-step34" style="height:320px;"></div>
+        <div class="metric-card">
+          <div class="metric-label">Sharpe Ratio</div>
+          <div class="metric-val gold" id="m-sharpe">—</div>
+          <div class="metric-sub">Risk-Adjusted Return</div>
         </div>
       </div>
       <div class="charts-grid" style="margin-top:14px;">
         <div class="chart-card">
-          <div class="chart-title">Step 5: Prior vs Posterior Expected Returns</div>
-          <div id="chart-bl-step5" style="height:320px;"></div>
+          <div class="chart-title">Optimal Allocation</div>
+          <div class="chart-desc">Donut chart of the final optimized weights. Each slice is one asset — hover to see its exact percentage. Assets with very small weights (&lt;0.1%) are excluded.</div>
+          <div id="chart-alloc" style="height:310px;"></div>
         </div>
-        <div class="chart-card">
-          <div class="chart-title">Step 6: Active Weights (Target minus Market)</div>
-          <div id="chart-bl-step6" style="height:320px;"></div>
+        <div class="chart-card" style="overflow-y:auto;max-height:380px;">
+          <div class="chart-title">Portfolio Weights</div>
+          <div class="chart-desc">Exact weight, bar visualization, expected annual return, and annual volatility for each position, sorted largest to smallest. Overridden values are shown in gold.</div>
+          <table class="wtable" id="wtable">
+            <thead><tr>
+              <th>Ticker</th><th>Weight</th><th style="width:130px;">Allocation</th>
+              <th>Exp. Return</th><th>Volatility</th>
+            </tr></thead>
+            <tbody id="wtable-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PERFORMANCE ──────────────────────────────────────────── -->
+    <div class="sub-panel" id="panel-performance">
+      <div class="charts-grid">
+        <div class="chart-card full">
+          <div class="chart-title">Historical Cumulative Returns</div>
+          <div class="chart-desc">Tracks how $1 invested at the start would have grown for each asset and the blended portfolio (bold white line). The dotted grey line is the SPY benchmark. Hover to compare returns on any date.</div>
+          <div id="chart-returns" style="height:260px;"></div>
         </div>
       </div>
       <div class="charts-grid" style="margin-top:14px;">
         <div class="chart-card full">
-          <div class="chart-title">Step 7: Sensitivity Analysis (Conviction Shift ±50%)</div>
-          <div id="chart-bl-step7" style="height:320px;"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="academic-hrp-results" style="display:none;margin-top:14px;">
-      <div class="charts-grid">
-        <div class="chart-card">
-          <div class="chart-title">Step 1: Distance Matrix</div>
-          <div id="chart-hrp-step1" style="height:320px;"></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Step 2: Quasi-Diagonalized Correlation Matrix</div>
-          <div id="chart-hrp-step2" style="height:320px;"></div>
+          <div class="chart-title">Portfolio Drawdown</div>
+          <div class="chart-desc">Percentage decline from the most recent portfolio peak at each point in time. A drawdown of −20% means the portfolio was 20% below its prior high. Shallower and shorter drawdowns indicate better downside protection.</div>
+          <div id="chart-drawdown" style="height:180px;"></div>
         </div>
       </div>
       <div class="charts-grid" style="margin-top:14px;">
         <div class="chart-card full">
-          <div class="chart-title">Step 3: Asset Risk Contributions</div>
-          <div id="chart-hrp-step3" style="height:320px;"></div>
+          <div class="chart-header">
+            <div class="chart-title" style="margin:0;">Rolling Metrics</div>
+            <div style="display:flex;gap:5px;" id="rolling-win-btns">
+              <button class="win-btn" onclick="setRollingWindow(30)">30d</button>
+              <button class="win-btn active" onclick="setRollingWindow(60)">60d</button>
+              <button class="win-btn" onclick="setRollingWindow(90)">90d</button>
+              <button class="win-btn" onclick="setRollingWindow(180)">180d</button>
+            </div>
+          </div>
+          <div class="chart-desc">Shows how volatility (blue, left axis) and the Sharpe ratio (gold, right axis) evolved through the selected period using a sliding window. A rising Sharpe with falling volatility signals consistently improving risk-adjusted performance.</div>
+          <div id="chart-rolling" style="height:240px;"></div>
         </div>
       </div>
     </div>
 
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card">
-        <div class="chart-title">Optimal Allocation</div>
-        <div class="chart-desc">Donut chart of the final optimized weights. Each slice is one asset — hover to see its exact percentage. Assets with very small weights (&lt;0.1%) are excluded.</div>
-        <div id="chart-alloc" style="height:310px;"></div>
+    <!-- ── RISK ─────────────────────────────────────────────────── -->
+    <div class="sub-panel" id="panel-risk">
+      <div class="charts-grid">
+        <div class="chart-card full">
+          <div class="chart-title">Correlation Matrix</div>
+          <div class="chart-desc">Pairwise correlation of daily returns between each asset (−1 to +1). Dark red = move in opposite directions (great diversification), dark green = move together (concentration risk). Aim for a mix of low or negative correlations to reduce portfolio volatility.</div>
+          <div id="chart-corr" style="height:320px;"></div>
+        </div>
       </div>
-      <div class="chart-card" style="overflow-y:auto;max-height:355px;">
-        <div class="chart-title">Portfolio Weights</div>
-        <div class="chart-desc">Exact weight, bar visualization, expected annual return, and annual volatility for each position, sorted largest to smallest. Overridden values are shown in gold.</div>
-        <table class="wtable" id="wtable">
-          <thead><tr>
-            <th>Ticker</th><th>Weight</th><th style="width:130px;">Allocation</th>
-            <th>Exp. Return</th><th>Volatility</th>
-          </tr></thead>
-          <tbody id="wtable-body"></tbody>
-        </table>
+      <div class="charts-grid" id="method-graph-container" style="margin-top:14px;">
+        <div class="chart-card full" id="frontier-card">
+          <div class="chart-title">Efficient Frontier</div>
+          <div class="chart-desc">Each point on the blue curve is a possible portfolio — the curve shows the maximum return achievable for each level of risk. The gold star is your optimal portfolio. The green dashed line (Capital Allocation Line) shows the best risk/reward trade-off including a risk-free asset.</div>
+          <div id="chart-frontier" style="height:350px;"></div>
+        </div>
+      </div>
+      <div class="charts-grid" style="margin-top:14px;">
+        <div class="chart-card full">
+          <div class="chart-title">Risk &amp; Performance Metrics</div>
+          <div class="chart-desc">Comprehensive breakdown across four groups: Performance (return, Sharpe, Sortino), Drawdown &amp; Tail (worst losses, duration), Value at Risk (probability-based daily loss estimates), and Benchmark (how the portfolio compares to SPY on beta, alpha, and tracking).</div>
+          <div id="metrics-detail"></div>
+        </div>
       </div>
     </div>
 
-    <div class="charts-grid" style="margin-top:14px;">
-      <div class="chart-card full">
-        <div class="chart-header">
-          <div class="chart-title" style="margin:0;">Monte Carlo Simulation</div>
-          <div class="section-actions">
-            <select id="mc-horizon" style="width:110px;padding:4px 7px;font-size:11px;background:#0a1020;border:1px solid var(--border);border-radius:5px;color:var(--text);">
-              <option value="63">3 Months</option>
-              <option value="126">6 Months</option>
-              <option value="252" selected>1 Year</option>
-              <option value="504">2 Years</option>
-              <option value="756">3 Years</option>
-            </select>
-            <select id="mc-nsims" style="width:95px;padding:4px 7px;font-size:11px;background:#0a1020;border:1px solid var(--border);border-radius:5px;color:var(--text);">
-              <option value="200">200 runs</option>
-              <option value="500" selected>500 runs</option>
-              <option value="1000">1000 runs</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="runMonteCarlo()" id="mc-btn">▶ Run Simulation</button>
+    <!-- ── METHOD ───────────────────────────────────────────────── -->
+    <div class="sub-panel" id="panel-method">
+      <div id="method-na" style="text-align:center;padding:60px 20px;color:var(--muted);">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 12px;opacity:.25;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <p style="font-size:13px;">Academic method plots are available for<br><strong style="color:var(--text);">Black-Litterman</strong> and <strong style="color:var(--text);">HRP</strong> optimizations.</p>
+      </div>
+      <div id="academic-bl-results" style="display:none;">
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">Step 1: Market Equilibrium (Implied Returns)</div>
+            <div id="chart-bl-step1" style="height:320px;"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Steps 3 &amp; 4: Investor Views &amp; Conviction</div>
+            <div id="chart-bl-step34" style="height:320px;"></div>
           </div>
         </div>
-        <div class="chart-desc">Simulates thousands of possible future portfolio paths by sampling from historical return distributions. The shaded band covers the 5th–95th percentile range of outcomes. This shows the spread of plausible scenarios — not a forecast.</div>
-        <div id="mc-stats-bar" style="display:none;" class="mc-stats-bar"></div>
-        <div id="chart-montecarlo" style="height:300px;">
-          <div id="chart-montecarlo-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Configure horizon &amp; runs above, then click Run Simulation.</div>
+        <div class="charts-grid" style="margin-top:14px;">
+          <div class="chart-card">
+            <div class="chart-title">Step 5: Prior vs Posterior Expected Returns</div>
+            <div id="chart-bl-step5" style="height:320px;"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Step 6: Active Weights (Target minus Market)</div>
+            <div id="chart-bl-step6" style="height:320px;"></div>
+          </div>
+        </div>
+        <div class="charts-grid" style="margin-top:14px;">
+          <div class="chart-card full">
+            <div class="chart-title">Step 7: Sensitivity Analysis (Conviction Shift ±50%)</div>
+            <div id="chart-bl-step7" style="height:320px;"></div>
+          </div>
+        </div>
+      </div>
+      <div id="academic-hrp-results" style="display:none;">
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">Step 1: Distance Matrix</div>
+            <div id="chart-hrp-step1" style="height:320px;"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Step 2: Quasi-Diagonalized Correlation Matrix</div>
+            <div id="chart-hrp-step2" style="height:320px;"></div>
+          </div>
+        </div>
+        <div class="charts-grid" style="margin-top:14px;">
+          <div class="chart-card full">
+            <div class="chart-title">Step 3: Asset Risk Contributions</div>
+            <div id="chart-hrp-step3" style="height:320px;"></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="charts-grid" style="margin-top:14px;margin-bottom:14px;">
-      <div class="chart-card full">
-        <div class="chart-header">
-          <div class="chart-title" style="margin:0;">Stress Test — Historical Scenarios</div>
-          <button class="btn btn-primary btn-sm" onclick="runStressTest()" id="stress-btn">▶ Run Stress Test</button>
+    <!-- ── SCENARIOS ────────────────────────────────────────────── -->
+    <div class="sub-panel" id="panel-scenarios">
+      <div class="charts-grid">
+        <div class="chart-card full">
+          <div class="chart-header">
+            <div class="chart-title" style="margin:0;">Monte Carlo Simulation</div>
+            <div class="section-actions">
+              <select id="mc-horizon" style="width:110px;padding:4px 7px;font-size:11px;background:#0a1020;border:1px solid var(--border);border-radius:5px;color:var(--text);">
+                <option value="63">3 Months</option>
+                <option value="126">6 Months</option>
+                <option value="252" selected>1 Year</option>
+                <option value="504">2 Years</option>
+                <option value="756">3 Years</option>
+              </select>
+              <select id="mc-nsims" style="width:95px;padding:4px 7px;font-size:11px;background:#0a1020;border:1px solid var(--border);border-radius:5px;color:var(--text);">
+                <option value="200">200 runs</option>
+                <option value="500" selected>500 runs</option>
+                <option value="1000">1000 runs</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="runMonteCarlo()" id="mc-btn">▶ Run Simulation</button>
+            </div>
+          </div>
+          <div class="chart-desc">Simulates thousands of possible future portfolio paths by sampling from historical return distributions. The shaded band covers the 5th–95th percentile range of outcomes. This shows the spread of plausible scenarios — not a forecast.</div>
+          <div id="mc-stats-bar" style="display:none;" class="mc-stats-bar"></div>
+          <div id="chart-montecarlo" style="height:300px;">
+            <div id="chart-montecarlo-placeholder" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Configure horizon &amp; runs above, then click Run Simulation.</div>
+          </div>
         </div>
-        <div class="chart-desc">Replays your current portfolio weights through six major historical market crises to estimate how it would have performed. Compares against SPY to show whether your diversification would have helped during real drawdowns.</div>
-        <div id="stress-results" style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center;">
-          Click Run Stress Test to simulate how this portfolio would have performed in past crises.
+      </div>
+      <div class="charts-grid" style="margin-top:14px;margin-bottom:14px;">
+        <div class="chart-card full">
+          <div class="chart-header">
+            <div class="chart-title" style="margin:0;">Stress Test — Historical Scenarios</div>
+            <button class="btn btn-primary btn-sm" onclick="runStressTest()" id="stress-btn">▶ Run Stress Test</button>
+          </div>
+          <div class="chart-desc">Replays your current portfolio weights through six major historical market crises to estimate how it would have performed. Compares against SPY to show whether your diversification would have helped during real drawdowns.</div>
+          <div id="stress-results" style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center;">
+            Click Run Stress Test to simulate how this portfolio would have performed in past crises.
+          </div>
         </div>
       </div>
     </div>

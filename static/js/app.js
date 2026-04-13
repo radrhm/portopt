@@ -1,3 +1,14 @@
+// ═══════════════════════════════════════════════════════════════════ SUB-TABS
+function switchSubTab(name) {
+  document.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const btn = document.querySelector('.sub-tab[data-tab="' + name + '"]');
+  if (btn) btn.classList.add('active');
+  // Re-render Plotly charts that were hidden while the panel was inactive
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
+
 // ═══════════════════════════════════════════════════════════════════ CONSTANTS
 const COLORS = ["#3b82f6","#06b6d4","#10b981","#f59e0b","#8b5cf6","#ef4444","#ec4899","#14b8a6","#f97316","#a855f7","#64748b","#22d3ee"];
 const METHODS = {
@@ -598,21 +609,26 @@ function renderResults(data, method) {
   document.getElementById("stress-results").innerHTML =
     `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0;">Click Run Stress Test to simulate how this portfolio would have performed in past crises.</div>`;
 
-  const blCard = document.getElementById("academic-bl-results");
-  if (method === "black_litterman" && data.bl_info) {
-    blCard.style.display = "block";
-    renderBLAcademicPlots(data.bl_info, data.weights);
-  } else {
-    blCard.style.display = "none";
-  }
-
+  const blCard  = document.getElementById("academic-bl-results");
   const hrpCard = document.getElementById("academic-hrp-results");
-  if (method === "hrp" && data.hrp_info) {
+  const methodNa = document.getElementById("method-na");
+  if (method === "black_litterman" && data.bl_info) {
+    blCard.style.display  = "block";
+    hrpCard.style.display = "none";
+    methodNa.style.display = "none";
+    renderBLAcademicPlots(data.bl_info, data.weights);
+  } else if (method === "hrp" && data.hrp_info) {
     hrpCard.style.display = "block";
+    blCard.style.display  = "none";
+    methodNa.style.display = "none";
     renderHRPAcademicPlots(data.hrp_info);
   } else {
+    blCard.style.display  = "none";
     hrpCard.style.display = "none";
+    methodNa.style.display = "block";
   }
+
+  switchSubTab('overview');
 }
 
 function renderAllocChart(weights) {
