@@ -34,24 +34,15 @@ METHOD_NAMES = {
     "custom":          "Custom Weights",
 }
 
-METHOD_FORMULAS = {
-    "max_sharpe":      (r"\max_w\ S_p = \frac{\mu_p - r_f}{\sigma_p}",
-                        r"\text{s.t.}\ \mathbf{1}^T w = 1,\ w_i \in [w_{min}, w_{max}]"),
-    "min_volatility":  (r"\min_w\ \sigma_p^2 = w^T \Sigma w",
-                        r"\text{s.t.}\ \mathbf{1}^T w = 1,\ w_i \in [w_{min}, w_{max}]"),
-    "black_litterman": (r"\mu_{BL} = \left[(\tau\Sigma)^{-1} + P^T\Omega^{-1}P\right]^{-1}"
-                        r"\left[(\tau\Sigma)^{-1}\Pi + P^T\Omega^{-1}q\right]",
-                        r"\Pi = \lambda \Sigma w_{mkt}\ \text{(market equilibrium prior)}"),
-    "risk_parity":     (r"RC_i = w_i \cdot \frac{\partial \sigma_p}{\partial w_i} = \frac{\sigma_p}{n}\ \forall i",
-                        r"\text{Each asset contributes equally to portfolio volatility}"),
-    "hrp":             (r"\text{Cluster assets via } d_{ij} = \sqrt{\frac{1-\rho_{ij}}{2}}",
-                        r"\text{Bisection: } w_i \propto \frac{1}{\sigma_i^2}\ \text{within each cluster}"),
-    "equal_weight":    (r"w_i = \frac{1}{N}\ \forall i",
-                        r"\text{N = number of assets; no optimisation needed}"),
-    "max_return":      (r"\max_w\ \mu_p = w^T \mu",
-                        r"\text{s.t.}\ \mathbf{1}^T w = 1,\ w_i \in [w_{min}, w_{max}]"),
-    "custom":          (r"w_i = \text{user-defined}",
-                        r"\sum_i w_i = 1\ \text{(normalised)}"),
+METHOD_DESCRIPTIONS = {
+    "max_sharpe":      "Maximum Sharpe Ratio maximises return per unit of risk, seeking the most efficient point on the efficient frontier where the reward-to-risk trade-off is highest.",
+    "min_volatility":  "Minimum Volatility targets the lowest possible portfolio variance, prioritising capital preservation by minimising exposure to market fluctuations.",
+    "black_litterman": "Black-Litterman blends market equilibrium returns with investor views, producing more intuitive and stable allocations than raw mean-variance optimisation.",
+    "risk_parity":     "Risk Parity (Equal Risk Contribution) ensures each asset contributes the same amount of risk to the portfolio, promoting balanced diversification across all holdings.",
+    "hrp":             "Hierarchical Risk Parity uses machine-learning clustering to group correlated assets before allocating inversely to their volatility, creating robust diversification.",
+    "equal_weight":    "Equal Weight (1/N) distributes capital evenly across all assets. It requires no return forecasts and has historically outperformed many complex models out-of-sample.",
+    "max_return":      "Maximum Return concentrates allocation toward the highest expected-return assets subject to weight constraints. Suitable for investors with high risk tolerance.",
+    "custom":          "Custom Weights reflect user-defined allocation preferences, normalised to sum to 100%. Results show how the chosen weights perform on historical and risk metrics.",
 }
 
 
@@ -63,7 +54,9 @@ def _get_gemini_text(metrics: dict, weights: dict, method: str,
     if not api_key:
         return _default_ai_text(method, metrics)
 
-    prompt = f"""You are a quantitative portfolio analyst writing an academic investment report.
+    prompt = f"""You are a senior investment analyst writing a professional portfolio report for an investor client.
+The tone should be clear, confident, and written in plain English — like a letter from a fund manager to their investors.
+Avoid jargon, equations, or academic language. Focus on what the numbers mean for the investor.
 
 Portfolio data:
 - Assets ({len(tickers)}): {', '.join(tickers)}
@@ -85,18 +78,25 @@ Portfolio data:
 - Information Ratio: {metrics.get('info_ratio', 0):.3f}
 Portfolio weights: {json.dumps({{k: f"{v*100:.1f}%" for k, v in weights.items()}})}
 
-Write a professional financial analysis report in JSON with these exact keys:
+Write investor-friendly analysis in JSON with these exact keys:
 {{
-  "abstract": "170-200 word executive summary covering method rationale, key performance metrics, risk profile, and overall portfolio quality",
-  "overview": "90-100 word analysis of portfolio composition, weight concentration, and key return/risk metrics",
-  "performance": "90-100 word analysis of historical returns, drawdown characteristics, and consistency metrics (win rate, Calmar)",
-  "risk": "90-100 word analysis of VaR, CVaR, beta, tracking error, and tail-risk properties",
-  "statistics": "90-100 word discussion of return distribution shape — skewness, excess kurtosis, departure from normality, and implications",
-  "method": "90-100 word explanation of the {METHOD_NAMES.get(method, method)} approach: mathematical intuition, advantages, and how results reflect the method",
-  "scenarios": "90-100 word forward-looking commentary on Monte Carlo uncertainty and historical stress resilience"
+  "abstract": "150-180 word executive summary: what this portfolio is, how it was built, what the key numbers tell an investor, and the bottom-line assessment of its quality",
+  "overview": "80-100 word plain-English summary of how capital is distributed, which positions dominate, and what the overall return/risk profile implies for an investor",
+  "overview_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the portfolio composition for an investor",
+  "performance": "80-100 word investor-friendly commentary on return history, worst drawdown experienced, win rate, and how consistently the portfolio has delivered",
+  "performance_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the performance data",
+  "risk": "80-100 word plain-English explanation of the key risks: how bad a bad day could get (VaR/CVaR), how closely it tracks the market (beta), and whether the manager adds value above the index (alpha)",
+  "risk_insight": "One punchy sentence (max 25 words) starting with a verb — the single most important takeaway from the risk profile",
+  "statistics": "80-100 word investor-friendly discussion: are individual stock returns normally distributed or do they have fat tails / skew? What does this mean for estimating risk?",
+  "statistics_insight": "One punchy sentence (max 25 words) starting with a verb — the key implication of the distribution shape for the investor",
+  "method": "80-100 word plain-English explanation of why the {METHOD_NAMES.get(method, method)} approach was used, what problem it solves, and how the resulting weights reflect that goal",
+  "method_insight": "One punchy sentence (max 25 words) starting with a verb — the key advantage this method offers over simpler alternatives",
+  "scenarios": "80-100 word investor-friendly forward-looking commentary: what the Monte Carlo fan chart tells us about upside/downside range, and how the portfolio held up in historical crises",
+  "scenarios_insight": "One punchy sentence (max 25 words) starting with a verb — the key resilience or vulnerability revealed by the stress tests"
 }}
 
-Use precise financial language, reference actual numbers, and write in academic tone. Return only valid JSON."""
+Reference actual numbers from the data. Write every section as if explaining to an intelligent investor who is not a quant.
+Return only valid JSON."""
 
     def _call():
         import requests as _req
@@ -135,48 +135,95 @@ Use precise financial language, reference actual numbers, and write in academic 
 
 
 def _default_ai_text(method: str, metrics: dict) -> dict:
-    m = METHOD_NAMES.get(method, method)
-    ret = metrics.get("expected_return", 0)
-    vol = metrics.get("volatility", 0)
-    sr  = metrics.get("sharpe_ratio", 0)
-    mdd = metrics.get("max_drawdown", 0)
+    m   = METHOD_NAMES.get(method, method)
+    ret = metrics.get("expected_return", 0) or 0
+    vol = metrics.get("volatility", 0) or 0
+    sr  = metrics.get("sharpe_ratio", 0) or 0
+    mdd = metrics.get("max_drawdown", 0) or 0
+    beta = metrics.get("beta", 0) or 0
+    alpha = metrics.get("alpha", 0) or 0
+    wr  = metrics.get("win_rate", 0) or 0
+    var = metrics.get("var_95_daily", 0) or 0
+    desc = METHOD_DESCRIPTIONS.get(method, f"The {m} method was used to construct this portfolio.")
+    sr_quality = "strong" if sr > 1.0 else ("solid" if sr > 0.5 else "modest")
+    mdd_desc = "relatively contained" if abs(mdd) < 20 else ("significant" if abs(mdd) < 40 else "severe")
     return {
         "abstract": (
-            f"This report presents a quantitative analysis of an optimised portfolio constructed using "
-            f"the {m} method. The portfolio achieves an expected annual return of {ret:.2f}% with "
-            f"annualised volatility of {vol:.2f}%, yielding a Sharpe ratio of {sr:.3f}. The maximum "
-            f"drawdown observed over the analysis period was {mdd:.2f}%. Full risk decomposition, "
-            f"distributional properties, and scenario analyses are provided in subsequent sections."
+            f"This portfolio was built using the {m} approach and targets an expected annual return "
+            f"of {ret:.1f}% with annual volatility of {vol:.1f}%. The Sharpe ratio of {sr:.2f} "
+            f"reflects {sr_quality} risk-adjusted performance — for every unit of risk taken, "
+            f"the portfolio has historically delivered {sr:.2f} units of excess return. "
+            f"The worst peak-to-trough decline over the period was {abs(mdd):.1f}%, which is "
+            f"{mdd_desc} for an equity portfolio. With a market beta of {beta:.2f} and an alpha "
+            f"of {alpha:.1f}%, the portfolio {'outperforms' if alpha > 0 else 'underperforms'} "
+            f"passive index exposure on a risk-adjusted basis. Overall, the portfolio offers a "
+            f"{'compelling' if sr > 1 else 'reasonable'} balance of return and risk for the "
+            f"assets and time period selected."
         ),
         "overview": (
-            f"The portfolio was constructed via {m} optimisation. With an expected annual return "
-            f"of {ret:.2f}% and volatility of {vol:.2f}%, it achieves a Sharpe ratio of {sr:.3f}, "
-            f"reflecting the risk-adjusted efficiency of the selected asset combination."
+            f"The portfolio targets {ret:.1f}% annualised returns at {vol:.1f}% volatility, "
+            f"giving a Sharpe ratio of {sr:.2f}. The {m} method was used to determine weights, "
+            f"selecting the combination of assets that best meets the chosen objective. "
+            f"The allocation reflects the relative attractiveness and correlation structure "
+            f"of the underlying holdings over the analysis period."
+        ),
+        "overview_insight": (
+            f"The {sr_quality} Sharpe ratio of {sr:.2f} suggests this allocation earns "
+            f"{'meaningful' if sr > 0.5 else 'limited'} compensation for the risk taken."
         ),
         "performance": (
-            f"Historical backtesting reveals an expected annualised return of {ret:.2f}% against "
-            f"a volatility of {vol:.2f}%. The maximum drawdown of {mdd:.2f}% characterises the "
-            f"worst peak-to-trough decline in the sample period."
+            f"The portfolio delivered {ret:.1f}% expected annual returns with a maximum drawdown "
+            f"of {abs(mdd):.1f}% — the worst losing streak an investor would have experienced. "
+            f"Closing days were profitable {wr:.0f}% of the time. The Calmar ratio contextualises "
+            f"return relative to that worst-case loss, and higher values indicate quicker recovery "
+            f"from drawdowns."
+        ),
+        "performance_insight": (
+            f"{'Winning' if wr > 55 else 'Losing'} on {wr:.0f}% of trading days, the portfolio "
+            f"{'consistently compounded gains' if wr > 55 else 'faced frequent small losses offset by larger gains'}."
         ),
         "risk": (
-            f"Portfolio risk analysis indicates annualised volatility of {vol:.2f}%. VaR and CVaR "
-            f"estimates quantify tail exposure. Beta and tracking error metrics contextualise "
-            f"systematic risk relative to the SPY benchmark."
+            f"On a typical bad day (5% tail), this portfolio is expected to lose no more than "
+            f"{abs(var):.2f}%. The market beta of {beta:.2f} means it moves roughly "
+            f"{beta:.0%} as much as the S&P 500 — {'amplifying' if beta > 1 else 'dampening'} "
+            f"broader market swings. An alpha of {alpha:.1f}% indicates the portfolio "
+            f"{'adds value' if alpha > 0 else 'lags'} beyond what passive index exposure would deliver."
+        ),
+        "risk_insight": (
+            f"{'Low beta of' if beta < 0.8 else 'Elevated beta of'} {beta:.2f} means this portfolio "
+            f"{'buffers' if beta < 1 else 'amplifies'} S&P 500 moves."
         ),
         "statistics": (
-            "Return distribution analysis examines departure from normality via skewness and excess "
-            "kurtosis. The Jarque-Bera test is applied to each constituent. Fat tails and negative "
-            "skewness are common in equity returns and inform risk-management decisions."
+            "The distribution of individual stock returns reveals how predictable each holding's "
+            "behaviour is. Stocks with fat tails (high kurtosis) can deliver extreme surprises — "
+            "in either direction — more often than a normal bell curve would suggest. Negative skew "
+            "means losses tend to be sharper than gains, which matters for risk budgeting. "
+            "The Jarque-Bera test flags which holdings deviate most from normal behaviour."
+        ),
+        "statistics_insight": (
+            "Fat-tailed holdings require larger risk buffers — standard deviation alone understates "
+            "their true downside potential."
         ),
         "method": (
-            f"The {m} framework was selected to optimise the portfolio. This approach "
-            f"provides a disciplined, quantitative allocation that balances return expectations "
-            f"against risk constraints defined by the covariance structure of the asset universe."
+            f"{desc} "
+            f"In practice, this means the weight assigned to each asset was determined by a "
+            f"disciplined, data-driven process rather than subjective judgement, reducing the "
+            f"risk of concentration in a single idea."
+        ),
+        "method_insight": (
+            f"Using {m} removes allocation guesswork and grounds every weight in historical "
+            f"data and a clear risk objective."
         ),
         "scenarios": (
-            "Monte Carlo simulation projects the distribution of future portfolio values across "
-            "thousands of paths sampled from the historical return distribution. Stress tests "
-            "replay portfolio weights through major historical crises to quantify downside resilience."
+            "The Monte Carlo simulation shows the range of outcomes an investor might realistically "
+            "experience over time — not a single forecast but a distribution of possibilities. "
+            "The stress tests apply the current weights to periods like the 2008 financial crisis "
+            "and the 2020 COVID crash, revealing how the portfolio would have held up under "
+            "extreme market conditions."
+        ),
+        "scenarios_insight": (
+            "Stress-test results reveal whether historical crisis periods would have been "
+            "survivable without forcing a panic sale."
         ),
     }
 
@@ -193,55 +240,8 @@ def _decode_chart(url: str | None) -> io.BytesIO | None:
         return None
 
 
-def _latex_to_readable(latex: str) -> str:
-    """Convert a LaTeX string to a human-readable Unicode approximation."""
-    import re
-    s = latex
-    # Common substitutions — order matters
-    s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"(\1) / (\2)", s)
-    s = re.sub(r"\\sqrt\{([^}]+)\}", r"√(\1)", s)
-    s = s.replace(r"\mathbf{1}", "𝟏").replace(r"\mathbf{w}", "𝐰")
-    s = s.replace(r"\mathbf", "").replace(r"\boldsymbol", "")
-    s = s.replace(r"\Sigma", "Σ").replace(r"\sigma", "σ").replace(r"\mu", "μ")
-    s = s.replace(r"\alpha", "α").replace(r"\beta", "β").replace(r"\pi", "π")
-    s = s.replace(r"\tau", "τ").replace(r"\lambda", "λ").replace(r"\omega", "ω")
-    s = s.replace(r"\Omega", "Ω").replace(r"\Pi", "Π").replace(r"\gamma", "γ")
-    s = s.replace(r"\chi", "χ").replace(r"\rho", "ρ").replace(r"\Delta", "Δ")
-    s = s.replace(r"\mathcal{N}", "𝒩").replace(r"\text{", "").replace(r"\quad", "   ")
-    s = re.sub(r"\^(\{[^}]+\}|[^\s{])", lambda m: _superscript(m.group(1).strip("{}")), s)
-    s = re.sub(r"_(\{[^}]+\}|[^\s{])",  lambda m: _subscript(m.group(1).strip("{}")),   s)
-    s = re.sub(r"\\[a-zA-Z]+", "", s)   # remove remaining commands
-    s = re.sub(r"[{}]", "", s)
-    return s.strip()
 
 
-_SUP = {
-    ord('0'): '\u2070', ord('1'): '\u00b9', ord('2'): '\u00b2', ord('3'): '\u00b3',
-    ord('4'): '\u2074', ord('5'): '\u2075', ord('6'): '\u2076', ord('7'): '\u2077',
-    ord('8'): '\u2078', ord('9'): '\u2079', ord('+'): '\u207a', ord('-'): '\u207b',
-    ord('='): '\u207c', ord('('): '\u207d', ord(')'): '\u207e', ord('n'): '\u207f',
-    ord('T'): '\u1d40', ord('p'): '\u1d56', ord('f'): '\u1da0', ord('m'): '\u1d50',
-    ord('k'): '\u1d4f', ord('d'): '\u1d48',
-}
-_SUB = {
-    ord('0'): '\u2080', ord('1'): '\u2081', ord('2'): '\u2082', ord('3'): '\u2083',
-    ord('4'): '\u2084', ord('5'): '\u2085', ord('6'): '\u2086', ord('7'): '\u2087',
-    ord('8'): '\u2088', ord('9'): '\u2089', ord('a'): '\u2090', ord('e'): '\u2091',
-    ord('f'): 'f',      ord('i'): '\u1d62', ord('j'): '\u2c7c', ord('k'): '\u2096',
-    ord('l'): '\u2097', ord('m'): '\u2098', ord('n'): '\u2099', ord('o'): '\u2092',
-    ord('p'): '\u209a', ord('r'): '\u1d63', ord('s'): '\u209b', ord('t'): '\u209c',
-    ord('u'): '\u1d64', ord('v'): '\u1d65', ord('x'): '\u2093', ord('y'): 'y',
-    ord('z'): 'z',      ord('+'): '\u208a', ord('-'): '\u208b', ord('='): '\u208c',
-    ord('('): '\u208d', ord(')'): '\u208e',
-}
-
-
-def _superscript(s: str) -> str:
-    return s.translate(_SUP)
-
-
-def _subscript(s: str) -> str:
-    return s.translate(_SUB)
 
 
 def _make_styles():
@@ -273,13 +273,10 @@ def _make_styles():
         "caption":       ps("cap", fontName="Helvetica",      fontSize=8,
                              textColor=HexColor(C_MUTED), alignment=TA_CENTER,
                              spaceAfter=10, spaceBefore=3),
-        "formula_label": ps("fl",  fontName="Helvetica-Bold", fontSize=8,
-                             textColor=HexColor(C_CYAN), spaceAfter=2, spaceBefore=8),
-        "formula_alt":   ps("fa",  fontName="Helvetica-Oblique", fontSize=9,
-                             textColor=HexColor(C_NAVY), alignment=TA_CENTER,
-                             spaceAfter=6, spaceBefore=6,
-                             backColor=HexColor("#eef4fd"),
-                             borderPad=6),
+        "insight_label": ps("il",  fontName="Helvetica-Bold", fontSize=7,
+                             textColor=HexColor(C_BLUE), spaceAfter=2),
+        "insight_body":  ps("ib",  fontName="Helvetica-Oblique", fontSize=9,
+                             textColor=HexColor(C_NAVY), leading=13, spaceAfter=0),
         "tbl_head":      ps("th",  fontName="Helvetica-Bold", fontSize=8,
                              textColor=HexColor("#ffffff")),
         "tbl_cell":      ps("tc",  fontName="Helvetica",      fontSize=8,
@@ -308,17 +305,24 @@ def _section_heading(num: int, title: str, styles: dict) -> list:
     ]
 
 
-def _formula_block(latex: str, label: str, counter: list, styles: dict,
-                   text_w_pts: float = 0) -> list:
-    """Render a numbered equation as a styled Unicode text block."""
-    from reportlab.platypus import Paragraph
 
-    counter[0] += 1
-    readable = _latex_to_readable(latex)
-    return [
-        Paragraph(f"Equation {counter[0]}: {label}", styles["formula_label"]),
-        Paragraph(readable, styles["formula_alt"]),
-    ]
+def _insight_box(text: str, styles: dict) -> list:
+    """Render a highlighted investor insight callout."""
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.units import cm
+    label = Paragraph('<b>KEY INSIGHT</b>', styles["insight_label"])
+    body  = Paragraph(text, styles["insight_body"])
+    tbl = Table([[label], [body]], colWidths=None)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, -1), HexColor("#eef4fd")),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING",   (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+        ("LINEBEFORE",   (0, 0), (0, -1),  3, HexColor(C_BLUE)),
+    ]))
+    return [tbl]
 
 
 def _embed_chart(chart_buf: io.BytesIO | None, fig_num: list,
@@ -491,7 +495,7 @@ def _build_abstract(req: dict, ai: dict, styles: dict, text_w: float) -> list:
 # ── Section builders ─────────────────────────────────────────────────────────────
 
 def _build_overview(req: dict, ai: dict, styles: dict, charts: dict,
-                    fig_num: list, eq_num: list, text_w: float) -> list:
+                    fig_num: list, text_w: float) -> list:
     from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.colors import HexColor
     from reportlab.lib.units import cm
@@ -536,23 +540,19 @@ def _build_overview(req: dict, ai: dict, styles: dict, charts: dict,
     tbl.setStyle(ts)
     story.append(tbl)
 
-    # Formula
-    story += _formula_block(
-        r"w^T \mathbf{1} = 1, \quad \sigma_p^2 = w^T \Sigma w",
-        "Portfolio Constraint & Variance", eq_num, styles, text_w,
-    )
+    story += _insight_box(ai.get("overview_insight", ""), styles)
     return story
 
 
 def _build_performance(req: dict, ai: dict, styles: dict, charts: dict,
-                       fig_num: list, eq_num: list, text_w: float) -> list:
+                       fig_num: list, text_w: float) -> list:
     from reportlab.platypus import Paragraph, Spacer
     metrics = req.get("analytics", {}).get("metrics", {})
     story   = _section_heading(2, "Historical Performance", styles)
     story  += [Paragraph(ai.get("performance", ""), styles["body"])]
     story += _embed_chart(_decode_chart(charts.get("chart-returns")), fig_num,
         "Cumulative returns: each asset normalised to $1 at the start date "
-        "(bold white line = portfolio blend; grey dashed = SPY benchmark).",
+        "(bold line = portfolio blend; dashed = SPY benchmark).",
         styles, text_w, 0.36)
     story += _embed_chart(_decode_chart(charts.get("chart-drawdown")), fig_num,
         "Portfolio drawdown — percentage decline from the most recent peak at each date. "
@@ -563,20 +563,12 @@ def _build_performance(req: dict, ai: dict, styles: dict, charts: dict,
         "through the analysis period.",
         styles, text_w, 0.32)
 
-    story += _formula_block(
-        r"S_p = \frac{\mu_p - r_f}{\sigma_p}",
-        "Sharpe Ratio", eq_num, styles, text_w)
-    story += _formula_block(
-        r"Sortino = \frac{\mu_p - r_f}{\sigma_d}, \quad \sigma_d = \sqrt{\frac{1}{T}\sum_{t:r_t<0} r_t^2}",
-        "Sortino Ratio (downside deviation)", eq_num, styles, text_w)
-    story += _formula_block(
-        r"MDD = \min_{t}\left(\frac{V_t - \max_{\tau \leq t} V_\tau}{\max_{\tau \leq t} V_\tau}\right)",
-        "Maximum Drawdown", eq_num, styles, text_w)
+    story += _insight_box(ai.get("performance_insight", ""), styles)
     return story
 
 
 def _build_risk(req: dict, ai: dict, styles: dict, charts: dict,
-                fig_num: list, eq_num: list, text_w: float) -> list:
+                fig_num: list, text_w: float) -> list:
     from reportlab.platypus import Paragraph, Spacer
     metrics = req.get("analytics", {}).get("metrics", {})
     story   = _section_heading(3, "Risk Analysis", styles)
@@ -617,20 +609,12 @@ def _build_risk(req: dict, ai: dict, styles: dict, charts: dict,
     story.append(Spacer(1, 0.15 * 28.35))
     story.append(_metric_table(risk_rows, styles, [text_w * 0.55, text_w * 0.45]))
 
-    story += _formula_block(
-        r"VaR_\alpha = -Q_\alpha(R_p)",
-        "Value at Risk (historical)", eq_num, styles, text_w)
-    story += _formula_block(
-        r"CVaR_\alpha = -E\left[R_p \mid R_p \leq VaR_\alpha\right]",
-        "Conditional Value at Risk (Expected Shortfall)", eq_num, styles, text_w)
-    story += _formula_block(
-        r"\beta = \frac{Cov(R_p, R_m)}{Var(R_m)}, \quad \alpha = R_p - r_f - \beta(R_m - r_f)",
-        "Portfolio Beta & Jensen's Alpha", eq_num, styles, text_w)
+    story += _insight_box(ai.get("risk_insight", ""), styles)
     return story
 
 
 def _build_statistics(req: dict, ai: dict, styles: dict,
-                      eq_num: list, text_w: float) -> list:
+                      text_w: float) -> list:
     from reportlab.platypus import Paragraph, Spacer, Table
     from reportlab.lib.colors import HexColor
 
@@ -672,21 +656,13 @@ def _build_statistics(req: dict, ai: dict, styles: dict,
     tbl.setStyle(ts)
     story.append(tbl)
 
-    story += _formula_block(
-        r"\gamma_1 = \frac{\mu_3}{\sigma^3} \quad \text{(skewness)}",
-        "Skewness (third standardised moment)", eq_num, styles, text_w)
-    story += _formula_block(
-        r"\gamma_2 = \frac{\mu_4}{\sigma^4} - 3 \quad \text{(excess kurtosis)}",
-        "Excess Kurtosis (fourth standardised moment)", eq_num, styles, text_w)
-    story += _formula_block(
-        r"JB = \frac{n}{6}\left(\gamma_1^2 + \frac{(\gamma_2)^2}{4}\right) \sim \chi^2(2)",
-        "Jarque-Bera Normality Test", eq_num, styles, text_w)
+    story += _insight_box(ai.get("statistics_insight", ""), styles)
     return story
 
 
 def _build_method(req: dict, ai: dict, styles: dict, charts: dict,
-                  fig_num: list, eq_num: list, text_w: float) -> list:
-    from reportlab.platypus import Paragraph, Spacer
+                  fig_num: list, text_w: float) -> list:
+    from reportlab.platypus import Paragraph
     method = req.get("method", "unknown")
     story  = _section_heading(5, f"Optimization Method: {METHOD_NAMES.get(method, method)}", styles)
     story += [Paragraph(ai.get("method", ""), styles["body"])]
@@ -694,7 +670,7 @@ def _build_method(req: dict, ai: dict, styles: dict, charts: dict,
     # Method-specific charts
     if method == "black_litterman":
         story += _embed_chart(_decode_chart(charts.get("chart-bl-step1")), fig_num,
-            "Step 1: Market-implied equilibrium returns (CAPM prior π = λΣw_mkt).",
+            "Step 1: Market-implied equilibrium returns (CAPM prior — market weights).",
             styles, text_w, 0.40)
         story += _embed_chart(_decode_chart(charts.get("chart-bl-step5")), fig_num,
             "Step 5: Prior (blue) vs posterior (gold) expected returns after blending investor views.",
@@ -704,15 +680,13 @@ def _build_method(req: dict, ai: dict, styles: dict, charts: dict,
             "Step 3: Asset risk contributions after hierarchical clustering allocation.",
             styles, text_w, 0.40)
 
-    f1, f2 = METHOD_FORMULAS.get(method, (r"w^T\mathbf{1}=1", r"w_i \geq 0"))
-    story += _formula_block(f1, "Primary optimisation objective", eq_num, styles, text_w)
-    story += _formula_block(f2, "Constraint / supplementary formula",    eq_num, styles, text_w)
+    story += _insight_box(ai.get("method_insight", ""), styles)
     return story
 
 
 def _build_scenarios(req: dict, ai: dict, styles: dict, charts: dict,
-                     fig_num: list, eq_num: list, text_w: float) -> list:
-    from reportlab.platypus import Paragraph, Spacer, Table
+                     fig_num: list, text_w: float) -> list:
+    from reportlab.platypus import Paragraph, Table
     from reportlab.lib.colors import HexColor
 
     story = _section_heading(6, "Forward-Looking Analysis & Stress Tests", styles)
@@ -727,9 +701,8 @@ def _build_scenarios(req: dict, ai: dict, styles: dict, charts: dict,
     # Stress test table if data present
     scenarios = req.get("stress_results", {})
     if scenarios:
-        Paragraph_ = Paragraph
         hdr = ["Scenario", "Period", "Portfolio", "SPY", "Δ vs SPY"]
-        tbl_data = [[Paragraph_(h, styles["tbl_head"]) for h in hdr]]
+        tbl_data = [[Paragraph(h, styles["tbl_head"]) for h in hdr]]
         for _key, sc in scenarios.items():
             if sc.get("error"):
                 continue
@@ -739,11 +712,11 @@ def _build_scenarios(req: dict, ai: dict, styles: dict, charts: dict,
             sty_p = styles["tbl_cell_g"] if p_ret > 0 else styles["tbl_cell_r"]
             sty_d = styles["tbl_cell_g"] if (delta or 0) > 0 else styles["tbl_cell_r"]
             tbl_data.append([
-                Paragraph_(sc.get("name",""), styles["tbl_cell"]),
-                Paragraph_(sc.get("period",""), styles["tbl_cell"]),
-                Paragraph_(f"{p_ret:.1f}%", sty_p),
-                Paragraph_(f"{s_ret:.1f}%" if s_ret is not None else "—", styles["tbl_cell"]),
-                Paragraph_(f"{delta:+.1f}%" if delta is not None else "—", sty_d),
+                Paragraph(sc.get("name",""), styles["tbl_cell"]),
+                Paragraph(sc.get("period",""), styles["tbl_cell"]),
+                Paragraph(f"{p_ret:.1f}%", sty_p),
+                Paragraph(f"{s_ret:.1f}%" if s_ret is not None else "—", styles["tbl_cell"]),
+                Paragraph(f"{delta:+.1f}%" if delta is not None else "—", sty_d),
             ])
         if len(tbl_data) > 1:
             col_ws = [text_w * x for x in [0.30, 0.27, 0.15, 0.14, 0.14]]
@@ -758,10 +731,7 @@ def _build_scenarios(req: dict, ai: dict, styles: dict, charts: dict,
             tbl.setStyle(ts)
             story.append(tbl)
 
-    story += _formula_block(
-        r"\hat{V}_t = V_0 \prod_{i=1}^{t}(1 + r_i), \quad r_i \sim \mathcal{N}(\mu, \Sigma)",
-        "Monte Carlo path simulation (geometric Brownian motion approximation)",
-        eq_num, styles, text_w)
+    story += _insight_box(ai.get("scenarios_insight", ""), styles)
     return story
 
 
@@ -822,9 +792,7 @@ def build_pdf(req_data: dict) -> bytes:
                                    METHOD_NAMES.get(method, method))
         canvas.restoreState()
 
-    # Shared mutable counters
     fig_num = [0]   # [current figure number]
-    eq_num  = [0]   # [current equation number]
 
     story = []
     story += _build_cover(req_data, styles, TEXT_W)
@@ -833,22 +801,22 @@ def build_pdf(req_data: dict) -> bytes:
     story += _build_abstract(req_data, ai, styles, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_overview(req_data, ai, styles, charts, fig_num, eq_num, TEXT_W)
+    story += _build_overview(req_data, ai, styles, charts, fig_num, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_performance(req_data, ai, styles, charts, fig_num, eq_num, TEXT_W)
+    story += _build_performance(req_data, ai, styles, charts, fig_num, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_risk(req_data, ai, styles, charts, fig_num, eq_num, TEXT_W)
+    story += _build_risk(req_data, ai, styles, charts, fig_num, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_statistics(req_data, ai, styles, eq_num, TEXT_W)
+    story += _build_statistics(req_data, ai, styles, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_method(req_data, ai, styles, charts, fig_num, eq_num, TEXT_W)
+    story += _build_method(req_data, ai, styles, charts, fig_num, TEXT_W)
     story.append(PageBreak())
 
-    story += _build_scenarios(req_data, ai, styles, charts, fig_num, eq_num, TEXT_W)
+    story += _build_scenarios(req_data, ai, styles, charts, fig_num, TEXT_W)
 
     doc.build(story, onFirstPage=_page_cb, onLaterPages=_page_cb)
     return buf.getvalue()
