@@ -390,7 +390,7 @@ function _grahamCardHTML(tk, d) {
     </div>
     <div id="${tk}-graham-na" class="val-note" style="display:none;">⚠️ Graham Number requires positive EPS and book value.</div>`;
   return _cardWrap('graham', tk, 'Graham Number',
-    'Benjamin Graham's conservative fair value: √(22.5 × EPS × BVPS)',
+    'Benjamin Graham conservative fair value: √(22.5 × EPS × BVPS)',
     body);
 }
 
@@ -406,7 +406,7 @@ function _ncavCardHTML(tk, d) {
       Net Current Asset Value = (Current Assets − Total Liabilities) ÷ Shares. Graham's deep-value floor: buy below NCAV.
     </div>`;
   return _cardWrap('ncav', tk, 'Net Current Asset Value (NCAV)',
-    'Graham's asset floor: value if the company liquidated all current assets and paid all debts',
+    'Graham asset floor: value if the company liquidated all current assets and paid all debts',
     body);
 }
 
