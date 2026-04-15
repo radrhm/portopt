@@ -35,12 +35,14 @@ async function valAddStock() {
     const res  = await fetch(`/api/valuation/financials?ticker=${encodeURIComponent(ticker)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fetch failed.');
-    _vStocks[ticker].data = data;
+    _vStocks[ticker].data     = data;
+    _vStocks[ticker].cachedAt = Date.now();
     _renderTab(ticker, data, false);
     _renderStockPanel(ticker, data);
     valSwitchTab(ticker);
     // Auto-add to the active list (folder)
     if (_vActiveListId !== null) valAddToList(_vActiveListId, ticker);
+    _saveValState();
   } catch (e) {
     statusEl.textContent = e.message;
     _removeTab(ticker);
@@ -71,6 +73,7 @@ function _removeTab(ticker) {
   const remaining = Object.keys(_vStocks);
   if (remaining.length) valSwitchTab(remaining[remaining.length - 1]);
   else document.getElementById('val-empty-state').style.display = 'block';
+  _saveValState();
 }
 
 function _renderTab(ticker, data, loading) {
@@ -998,12 +1001,65 @@ function _renderModelCharts(tk, d) {
 // LISTS MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── LocalStorage persistence ──────────────────────────────────────────────────
+const _VAL_CACHE_KEY = 'portopt_val_v1';
+const _VAL_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
+
+function _saveValState() {
+  try {
+    const payload = {
+      stocks:     {},
+      activeList: _vActiveListId,
+      expanded:   [..._vExpandedLists],
+    };
+    for (const [ticker, stock] of Object.entries(_vStocks)) {
+      if (stock.data) {
+        payload.stocks[ticker] = { data: stock.data, cachedAt: stock.cachedAt || Date.now() };
+      }
+    }
+    localStorage.setItem(_VAL_CACHE_KEY, JSON.stringify(payload));
+  } catch (_) {} // quota exceeded — silently ignore
+}
+
+function _restoreValState() {
+  try {
+    const raw = localStorage.getItem(_VAL_CACHE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+
+    // Restore active list + expanded folders (validate IDs still exist in DB)
+    if (state.activeList != null && _vLists.some(l => l.id === state.activeList)) {
+      _vActiveListId = state.activeList;
+    }
+    if (Array.isArray(state.expanded)) {
+      state.expanded
+        .filter(id => _vLists.some(l => l.id === id))
+        .forEach(id => _vExpandedLists.add(id));
+    }
+
+    // Restore open stock tabs from cache (skip if older than TTL)
+    const now = Date.now();
+    for (const [ticker, stock] of Object.entries(state.stocks || {})) {
+      if (!stock.data) continue;
+      if ((now - (stock.cachedAt || 0)) > _VAL_CACHE_TTL) continue;
+      _vStocks[ticker] = { data: stock.data, id: `vs-${ticker}`, cachedAt: stock.cachedAt };
+      _renderTab(ticker, stock.data, false);
+      _renderStockPanel(ticker, stock.data);
+    }
+
+    // Show the last tab
+    const tickers = Object.keys(_vStocks);
+    if (tickers.length > 0) valSwitchTab(tickers[tickers.length - 1]);
+  } catch (_) {}
+}
+
 // ── Init: load lists from server on page load ─────────────────────────────────
 async function valListsInit() {
   try {
     const res = await fetch('/api/valuation/lists');
     if (res.ok) _vLists = await res.json();
   } catch (_) {}
+  _restoreValState(); // restore tabs + active/expanded state before rendering
   _renderLists();
 }
 
