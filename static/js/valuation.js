@@ -126,6 +126,7 @@ function _renderStockPanel(ticker, d) {
   // Initial calc + static historical charts
   _recalcTicker(ticker);
   _renderModelCharts(ticker, d);
+  valApplyModelSettings();
 }
 
 function _stockHeaderHTML(d) {
@@ -226,7 +227,7 @@ function _categoriesHTML(tk, d) {
 
 function _cardWrap(id, tk, title, subtitle, bodyHTML) {
   return `
-  <div class="val-card" id="vcard-${tk}-${id}">
+  <div class="val-card" id="vcard-${tk}-${id}" data-model="${id}">
     <div class="val-card-header">
       <div>
         <div class="val-card-title">${title}</div>
@@ -279,7 +280,6 @@ function _dcfCardHTML(tk, d) {
     <div id="mchart-${tk}-dcf" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-dcf-fcf`,  'FCF — Latest Year ($M)', d.fcf_total_m,   'Total free cash flow, most recent year', '1')}
-      ${_inp(`${tk}-dcf-mktcap`, 'Market Cap ($M)', d.market_cap_m, 'Current market capitalisation in millions', '10')}
       ${_inp(`${tk}-dcf-shares`, 'Shares Outstanding (M)', d.shares_m, 'Total diluted shares outstanding', '0.1', '0.001')}
       ${_inp(`${tk}-dcf-g1`,   'Growth Yr 1–5 (%)', g1,              'Expected annual FCF growth, first 5 years', '0.5', '-30', '80')}
       ${_inp(`${tk}-dcf-g2`,   'Growth Yr 6–10 (%)', g2,             'Slower growth phase, years 6–10', '0.5', '-20', '50')}
@@ -332,12 +332,11 @@ function _peCardHTML(tk, d) {
   const fwdPe = Math.max((d.sector_pe - 2), 10).toFixed(1);
   const body = `
     <div id="mchart-${tk}-pe" class="val-mchart"></div>
-    <div class="val-inputs-grid">
+    <div class="val-inputs-grid col2">
       ${_inp(`${tk}-pe-epsttm`, 'EPS TTM ($)', d.eps_ttm,    'Trailing twelve months earnings per share', '0.01')}
       ${_inp(`${tk}-pe-epsfwd`, 'EPS Forward ($)', d.eps_forward, 'Next twelve months consensus estimate', '0.01')}
       ${_inp(`${tk}-pe-multtm`, 'Target P/E (TTM)', d.sector_pe, 'Sector / historical fair P/E multiple', '0.5', '1')}
       ${_inp(`${tk}-pe-mulfwd`, 'Target P/E (Fwd)', fwdPe,   'Forward P/E to apply to next-year earnings', '0.5', '1')}
-      ${_inp(`${tk}-pe-shares`, 'Shares (M)', d.shares_m, 'For reference — price is EPS × multiple', '0.1', '0.001')}
     </div>
     <div class="val-two-results">
       <div class="val-two-item"><span class="val-two-label">TTM P/E Fair Value</span><span class="val-card-result sml" id="res-${tk}-pe-ttm">—</span></div>
@@ -729,6 +728,7 @@ function _renderCompareChart(tk, results, price, cur) {
   const xs = [], ys = [], colors = [];
   for (const [key, val] of Object.entries(results)) {
     if (!val) continue;
+    if (_vModelSettings[key] === false) continue;
     xs.push(labels[key] || key);
     ys.push(val);
     colors.push(val >= price ? '#10b981' : '#ef4444');
@@ -1055,6 +1055,7 @@ function _restoreValState() {
 
 // ── Init: load lists from server on page load ─────────────────────────────────
 async function valListsInit() {
+  _loadModelSettings();
   try {
     const res = await fetch('/api/valuation/lists');
     if (res.ok) _vLists = await res.json();
@@ -1368,6 +1369,121 @@ function _valToast(msg, linkText, linkHref) {
 // ── Escape HTML helper ────────────────────────────────────────────────────────
 function _escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODEL SELECTION SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _VAL_SETTINGS_KEY = 'portopt_val_settings_v1';
+const _VAL_MODEL_LIST = [
+  { id: 'dcf',    label: 'Discounted Cash Flow (DCF)', cat: 'Cash Flow' },
+  { id: 'epv',    label: 'Earnings Power Value (EPV)', cat: 'Cash Flow' },
+  { id: 'ddm',    label: 'Dividend Discount Model (DDM)', cat: 'Dividend' },
+  { id: 'pe',     label: 'Price / Earnings (P/E)',     cat: 'Multiples' },
+  { id: 'evda',   label: 'EV / EBITDA',                cat: 'Multiples' },
+  { id: 'eveb',   label: 'EV / EBIT',                  cat: 'Multiples' },
+  { id: 'ps',     label: 'Price / Sales (P/S)',         cat: 'Multiples' },
+  { id: 'peg',    label: 'PEG Ratio',                  cat: 'Multiples' },
+  { id: 'graham', label: 'Graham Number',              cat: 'Asset-Based' },
+  { id: 'ncav',   label: 'Net Current Asset Value (NCAV)', cat: 'Asset-Based' },
+];
+
+let _vModelSettings = Object.fromEntries(_VAL_MODEL_LIST.map(m => [m.id, true]));
+
+function _loadModelSettings() {
+  try {
+    const raw = localStorage.getItem(_VAL_SETTINGS_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      _VAL_MODEL_LIST.forEach(m => { if (m.id in saved) _vModelSettings[m.id] = !!saved[m.id]; });
+    }
+  } catch(_) {}
+}
+
+function _saveModelSettings() {
+  try { localStorage.setItem(_VAL_SETTINGS_KEY, JSON.stringify(_vModelSettings)); } catch(_) {}
+}
+
+function valApplyModelSettings() {
+  // Show/hide individual model cards across all rendered panels
+  document.querySelectorAll('.val-card[data-model]').forEach(card => {
+    card.style.display = _vModelSettings[card.dataset.model] !== false ? '' : 'none';
+  });
+  // Hide any category section where all its cards are hidden
+  document.querySelectorAll('.val-category').forEach(cat => {
+    const anyVisible = [...cat.querySelectorAll('.val-card')].some(c => c.style.display !== 'none');
+    cat.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+function valToggleModel(modelId, enabled) {
+  _vModelSettings[modelId] = enabled;
+  _saveModelSettings();
+  valApplyModelSettings();
+  // Re-render comparison charts for all open stocks (disabled models excluded)
+  for (const [ticker, stock] of Object.entries(_vStocks)) {
+    if (stock.data) _recalcTicker(ticker);
+  }
+}
+
+let _settingsOpen = false;
+
+function valToggleSettings() {
+  _settingsOpen ? valCloseSettings() : _openSettings();
+}
+
+function _openSettings() {
+  _settingsOpen = true;
+  _renderSettingsPanel();
+  const panel = document.getElementById('val-settings-panel');
+  const btn   = document.getElementById('val-settings-btn');
+  panel.style.display = 'block';
+  btn.classList.add('active');
+  // Position below the button
+  const rect = btn.getBoundingClientRect();
+  const pw = 238;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  panel.style.left = `${Math.max(4, left)}px`;
+  panel.style.top  = `${rect.bottom + 4}px`;
+  setTimeout(() => {
+    document.addEventListener('click', _settingsOutsideClick, {once: true, capture: true});
+  }, 0);
+}
+
+function valCloseSettings() {
+  _settingsOpen = false;
+  const panel = document.getElementById('val-settings-panel');
+  const btn   = document.getElementById('val-settings-btn');
+  if (panel) panel.style.display = 'none';
+  if (btn)   btn.classList.remove('active');
+}
+
+function _settingsOutsideClick(e) {
+  const panel = document.getElementById('val-settings-panel');
+  const btn   = document.getElementById('val-settings-btn');
+  if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+    valCloseSettings();
+  } else {
+    document.addEventListener('click', _settingsOutsideClick, {once: true, capture: true});
+  }
+}
+
+function _renderSettingsPanel() {
+  const body = document.getElementById('val-settings-body');
+  if (!body) return;
+  const cats = {};
+  _VAL_MODEL_LIST.forEach(m => { (cats[m.cat] = cats[m.cat] || []).push(m); });
+  body.innerHTML = Object.entries(cats).map(([cat, models]) => `
+    <div class="val-settings-cat">${cat}</div>
+    ${models.map(m => `
+      <label class="val-settings-row">
+        <input type="checkbox" ${_vModelSettings[m.id] ? 'checked' : ''}
+               onchange="valToggleModel('${m.id}', this.checked)"/>
+        <span>${m.label}</span>
+      </label>`).join('')}
+  `).join('');
 }
 
 // ── Bootstrap on load ─────────────────────────────────────────────────────────

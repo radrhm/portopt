@@ -48,6 +48,12 @@
            onkeydown="if(event.key==='Enter')valAddStock()"/>
     <button class="btn btn-primary btn-sm" onclick="valAddStock()" id="val-search-btn">Add</button>
     <span id="val-status" style="font-size:11px;color:var(--red);margin-left:6px;white-space:nowrap;"></span>
+    <button class="val-settings-btn" onclick="valToggleSettings()" id="val-settings-btn" title="Choose which models to display">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14M12 2v2M12 20v2M2 12h2M20 12h2"/>
+      </svg>
+      Models
+    </button>
   </div>
 </div>
 
@@ -98,6 +104,15 @@
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
     New list
   </button>
+</div>
+
+<!-- ── MODEL SETTINGS PANEL (floating) ──────────────────────────────── -->
+<div id="val-settings-panel" class="val-settings-panel" style="display:none;">
+  <div class="val-settings-hd">
+    <span>Model Selection</span>
+    <button class="val-settings-close" onclick="valCloseSettings()">×</button>
+  </div>
+  <div class="val-settings-body" id="val-settings-body"></div>
 </div>
 
 <!-- ── TOAST NOTIFICATION ────────────────────────────────────────────── -->

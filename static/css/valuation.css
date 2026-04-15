@@ -578,6 +578,91 @@
 }
 .val-mchart:empty { display: none; }
 
+/* ── SETTINGS BUTTON (in tabs/search row) ────────────────────── */
+.val-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 9px;
+  transition: all .15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.val-settings-btn:hover,
+.val-settings-btn.active { border-color: var(--accent2); color: var(--accent2); }
+
+/* ── SETTINGS PANEL (floating) ───────────────────────────────── */
+.val-settings-panel {
+  position: fixed;
+  width: 238px;
+  background: #0d1626;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  z-index: 500;
+  box-shadow: 0 8px 32px rgba(0,0,0,.55);
+}
+.val-settings-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.val-settings-hd span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text);
+}
+.val-settings-close {
+  width: 18px; height: 18px; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 3px; padding: 0; transition: color .1s;
+}
+.val-settings-close:hover { color: var(--red); }
+.val-settings-body {
+  padding: 10px 12px 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.val-settings-cat {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 0 4px;
+  margin-top: 2px;
+}
+.val-settings-cat:first-child { padding-top: 0; margin-top: 0; }
+.val-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--muted2);
+  cursor: pointer;
+  transition: color .1s;
+  user-select: none;
+}
+.val-settings-row:hover { color: var(--text); }
+.val-settings-row input[type=checkbox] {
+  accent-color: var(--accent2);
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 13px; height: 13px;
+}
+
 /* ── NOTE ────────────────────────────────────────────────────── */
 .val-note {
   background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
