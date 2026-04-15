@@ -162,6 +162,12 @@
 }
 .val-list-row:hover { background: rgba(255,255,255,.04); }
 .val-list-row.expanded { background: rgba(99,102,241,.06); }
+.val-list-row.active-list {
+  background: rgba(99,102,241,.14);
+  border-left: 2px solid var(--accent2);
+  padding-left: 10px;
+}
+.val-list-row.active-list .val-list-name { color: var(--accent2); }
 
 .val-list-chevron {
   color: var(--muted);
@@ -194,6 +200,14 @@
   font-weight: 600;
   outline: none;
   min-width: 0;
+}
+
+.val-list-active-dot {
+  font-size: 6px;
+  color: var(--accent2);
+  flex-shrink: 0;
+  margin: 0 2px;
+  opacity: .9;
 }
 
 .val-list-count {

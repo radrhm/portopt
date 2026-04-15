@@ -9,8 +9,10 @@ const _vStocks = {};   // { AAPL: { data: {...}, id: 'vs-AAPL' }, ... }
 let   _vActive = null; // currently shown ticker key
 
 // ── Lists state ───────────────────────────────────────────────────────────────
-let _vLists    = [];   // [{id, name, tickers:[{ticker,name,price}]}]
-let _vAtlTicker = null; // ticker for which the Add-to-List dropdown is open
+let _vLists        = [];   // [{id, name, tickers:[{ticker,name,price}]}]
+let _vAtlTicker    = null; // ticker for which the Add-to-List dropdown is open
+let _vActiveListId = null; // selected list — new stocks are auto-added here
+const _vExpandedLists = new Set(); // IDs of expanded list folders
 
 // ── Add stock ─────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,8 @@ async function valAddStock() {
     _renderTab(ticker, data, false);
     _renderStockPanel(ticker, data);
     valSwitchTab(ticker);
+    // Auto-add to the active list (folder)
+    if (_vActiveListId !== null) valAddToList(_vActiveListId, ticker);
   } catch (e) {
     statusEl.textContent = e.message;
     _removeTab(ticker);
@@ -1009,12 +1013,15 @@ function _renderLists() {
   if (!container) return;
 
   if (!_vLists.length) {
-    container.innerHTML = '<div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one.</div>';
+    container.innerHTML = '<div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one,<br/>then add stocks to it.</div>';
     return;
   }
 
   container.innerHTML = _vLists.map(lst => {
-    const tickers = lst.tickers || [];
+    const tickers  = lst.tickers || [];
+    const isActive = _vActiveListId === lst.id;
+    const isOpen   = _vExpandedLists.has(lst.id);
+
     const tickerRows = tickers.length
       ? tickers.map(t => `
           <div class="val-list-ticker-row" onclick="valSwitchOrLoadTicker('${t.ticker}')">
@@ -1023,7 +1030,7 @@ function _renderLists() {
             <button class="val-list-ticker-del" title="Remove from list"
               onclick="event.stopPropagation();valRemoveFromList(${lst.id},'${t.ticker}')">×</button>
           </div>`).join('')
-      : '<div class="val-list-tickers-empty">No stocks yet</div>';
+      : '<div class="val-list-tickers-empty">Empty — add a ticker above</div>';
 
     const convertBtn = tickers.length
       ? `<button class="val-list-btn convert" title="Convert to portfolio"
@@ -1034,11 +1041,13 @@ function _renderLists() {
 
     return `
     <div class="val-list-item" id="vlist-${lst.id}">
-      <div class="val-list-row" id="vlist-row-${lst.id}"
-           onclick="_toggleList(${lst.id})"
+      <div class="val-list-row ${isOpen ? 'expanded' : ''} ${isActive ? 'active-list' : ''}"
+           id="vlist-row-${lst.id}"
+           onclick="_selectList(${lst.id})"
            ondblclick="event.stopPropagation();_startRenameList(${lst.id})">
         <span class="val-list-chevron">›</span>
         <span class="val-list-name" id="vlist-name-${lst.id}">${_escHtml(lst.name)}</span>
+        ${isActive ? '<span class="val-list-active-dot" title="Active — new stocks go here">●</span>' : ''}
         <span class="val-list-count">${tickers.length}</span>
         <div class="val-list-actions">
           ${convertBtn}
@@ -1046,20 +1055,30 @@ function _renderLists() {
             onclick="event.stopPropagation();_valDeleteList(${lst.id})">×</button>
         </div>
       </div>
-      <div class="val-list-tickers" id="vlist-tickers-${lst.id}">
+      <div class="val-list-tickers ${isOpen ? 'open' : ''}" id="vlist-tickers-${lst.id}">
         ${tickerRows}
       </div>
     </div>`;
   }).join('');
 }
 
-// ── Toggle expand/collapse ────────────────────────────────────────────────────
+// ── Select list as active folder (click = select + expand; click again = collapse only) ──
+function _selectList(id) {
+  if (_vActiveListId === id) {
+    // Already active: just toggle expand
+    _vExpandedLists.has(id) ? _vExpandedLists.delete(id) : _vExpandedLists.add(id);
+  } else {
+    // New selection: activate and expand
+    _vActiveListId = id;
+    _vExpandedLists.add(id);
+  }
+  _renderLists();
+}
+
+// ── Toggle expand/collapse without changing active selection ──────────────────
 function _toggleList(id) {
-  const row     = document.getElementById(`vlist-row-${id}`);
-  const tickers = document.getElementById(`vlist-tickers-${id}`);
-  if (!row || !tickers) return;
-  const open = tickers.classList.toggle('open');
-  row.classList.toggle('expanded', open);
+  _vExpandedLists.has(id) ? _vExpandedLists.delete(id) : _vExpandedLists.add(id);
+  _renderLists();
 }
 
 // ── Inline rename ─────────────────────────────────────────────────────────────
@@ -1089,19 +1108,19 @@ function _startRenameList(id) {
 
 async function valNewList() {
   try {
-    const res  = await fetch('/api/valuation/lists', {
+    const res = await fetch('/api/valuation/lists', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({name: 'New List'})
     });
     const lst = await res.json();
     _vLists.unshift(lst);
+    // Auto-select and expand the new list
+    _vActiveListId = lst.id;
+    _vExpandedLists.add(lst.id);
     _renderLists();
-    // Auto-expand and start rename
-    setTimeout(() => {
-      _toggleList(lst.id);
-      _startRenameList(lst.id);
-    }, 50);
+    // Start rename so user names it right away
+    setTimeout(() => _startRenameList(lst.id), 50);
   } catch (_) {
     _valToast('Failed to create list.');
   }
@@ -1123,6 +1142,8 @@ async function _valRenameList(id, name) {
 
 async function _valDeleteList(id) {
   _vLists = _vLists.filter(l => l.id !== id);
+  if (_vActiveListId === id) _vActiveListId = null;
+  _vExpandedLists.delete(id);
   _renderLists();
   try {
     await fetch(`/api/valuation/lists/${id}`, {method: 'DELETE'});
