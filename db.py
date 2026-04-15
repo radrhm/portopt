@@ -66,10 +66,22 @@ def init_db() -> None:
 def list_portfolios() -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT id, name, created_at, updated_at, is_custom FROM portfolios ORDER BY updated_at DESC"
+        "SELECT * FROM portfolios ORDER BY updated_at DESC"
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        for k in ("settings", "tickers", "overrides", "bl_views", "custom_weights", "results"):
+            if d.get(k):
+                try:
+                    d[k] = json.loads(d[k])
+                except (json.JSONDecodeError, TypeError):
+                    d[k] = {} if k != "results" else None
+            else:
+                d[k] = {} if k not in ("results", "custom_weights") else None
+        result.append(d)
+    return result
 
 
 def get_portfolio(pid: int) -> dict | None:

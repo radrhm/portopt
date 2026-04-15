@@ -116,10 +116,11 @@ const METHODS = {
 // ═══════════════════════════════════════════════════════════════════ PROJECT STATE
 let projects = [];
 let activeId = null;
+let _savePending = null;
 
 function makeProject(name) {
   return {
-    id: Date.now() + Math.random(),
+    id: null,
     name: name || "Portfolio",
     tickers: {},
     stockData: {},
@@ -137,30 +138,89 @@ function makeProject(name) {
       blTau:     0.05,
     },
     results: null,
+    is_custom: false,
   };
 }
 
 function today()        { return new Date().toISOString().slice(0,10); }
 function defaultStart() { const d = new Date(); d.setFullYear(d.getFullYear()-3); return d.toISOString().slice(0,10); }
 
-function saveProjects() {
-  const slim = projects.map(p => {
-    const sd = {};
-    Object.keys(p.stockData).forEach(s => { sd[s] = {...p.stockData[s], sparkline: undefined}; });
-    return {...p, stockData: sd, results: p.results ? {performance: p.results.performance, weights: p.results.weights} : null};
-  });
-  try { localStorage.setItem("portopt_v2", JSON.stringify(slim)); } catch(e) {}
+function _projectFromDB(row) {
+  return {
+    ...makeProject(),
+    id:            row.id,
+    name:          row.name,
+    settings:      (row.settings && Object.keys(row.settings).length) ? row.settings : makeProject().settings,
+    tickers:       row.tickers        || {},
+    overrides:     row.overrides      || {},
+    blViews:       row.bl_views       || {},
+    customWeights: row.custom_weights || {},
+    results:       row.results        || null,
+    is_custom:     !!row.is_custom,
+    stockData:     {},
+  };
 }
 
-function loadProjects() {
+function _projectToDB(p) {
+  return {
+    ...(p.id ? {id: p.id} : {}),
+    name:           p.name,
+    settings:       p.settings,
+    tickers:        p.tickers,
+    overrides:      p.overrides,
+    bl_views:       p.blViews,
+    custom_weights: p.customWeights,
+    results:        p.results || null,
+    is_custom:      p.is_custom ? 1 : 0,
+  };
+}
+
+async function _api_loadAll() {
   try {
-    const raw = JSON.parse(localStorage.getItem("portopt_v2") || "null");
-    if (raw && Array.isArray(raw) && raw.length) {
-      projects = raw.map(p => ({...makeProject(), ...p}));
-      return;
+    const res  = await fetch("/api/portfolios");
+    const data = await res.json();
+    if (data.portfolios && data.portfolios.length) {
+      projects = data.portfolios.map(_projectFromDB);
+    } else {
+      await _createDefaultPortfolio();
     }
-  } catch(e) {}
-  projects = [makeProject("Portfolio 1")];
+  } catch(e) {
+    if (!projects.length) projects = [{...makeProject("Portfolio 1"), id: Date.now()}];
+  }
+}
+
+async function _createDefaultPortfolio() {
+  try {
+    const p   = makeProject("Portfolio 1");
+    const res = await fetch("/api/portfolios", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(_projectToDB(p)),
+    });
+    const data = await res.json();
+    p.id = data.id;
+    projects = [p];
+  } catch(e) {
+    projects = [{...makeProject("Portfolio 1"), id: Date.now()}];
+  }
+}
+
+function saveProjects() {
+  const p = activeProject();
+  if (!p || !p.id) return;
+  clearTimeout(_savePending);
+  _savePending = setTimeout(() => _doSyncProject(p), 800);
+}
+
+async function _doSyncProject(p) {
+  if (!p || !p.id) return;
+  try {
+    await fetch(`/api/portfolios/${p.id}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(_projectToDB(p)),
+    });
+  } catch(e) { /* silent — background sync */ }
 }
 
 function activeProject() { return projects.find(p => p.id === activeId); }
@@ -202,31 +262,51 @@ function finishRename(e, id) {
   if (p) { p.name = el.textContent.trim() || p.name; saveProjects(); }
 }
 
-function newProject() {
+async function newProject() {
   saveCurrentUIToProject();
-  const p = makeProject(`Portfolio ${projects.length + 1}`);
+  _doSyncProject(activeProject());
+  const name = `Portfolio ${projects.length + 1}`;
+  const p    = makeProject(name);
+  try {
+    const res  = await fetch("/api/portfolios", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(_projectToDB(p)),
+    });
+    const data = await res.json();
+    p.id = data.id;
+  } catch(e) {
+    p.id = Date.now() + Math.random();
+  }
   projects.push(p);
-  switchProject(p.id);
+  activeId = p.id;
+  loadProjectIntoUI(p);
+  renderTabs();
 }
 
-function deleteProject(id) {
+async function deleteProject(id) {
   if (projects.length <= 1) return;
   if (!confirm("Delete this project?")) return;
+  if (id && Number.isInteger(id)) {
+    try { await fetch(`/api/portfolios/${id}`, {method: "DELETE"}); } catch(e) {}
+  }
   projects = projects.filter(p => p.id !== id);
   if (activeId === id) {
     activeId = projects[projects.length-1].id;
     loadProjectIntoUI(activeProject());
   }
   renderTabs();
-  saveProjects();
 }
 
 function switchProject(id) {
   saveCurrentUIToProject();
+  _doSyncProject(activeProject());
   activeId = id;
   loadProjectIntoUI(activeProject());
   renderTabs();
-  saveProjects();
+  const syms    = Object.keys(activeProject().tickers);
+  const missing = syms.filter(s => !activeProject().stockData[s]);
+  if (missing.length) fetchStockData(missing);
 }
 
 // ═══════════════════════════════════════════════════════════════════ UI ↔ PROJECT SYNC
@@ -1455,9 +1535,42 @@ async function downloadPDF() {
 }
 
 // ═══════════════════════════════════════════════════════════════════ INIT
-loadProjects();
-if (!projects.length) projects = [makeProject("Portfolio 1")];
-activeId = projects[0].id;
-renderTabs();
-loadProjectIntoUI(activeProject());
-onMethodChange();
+async function _migrateFromLocalStorage() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("portopt_v2") || "null");
+    if (!raw || !Array.isArray(raw) || !raw.length) return;
+    const check = await fetch("/api/portfolios");
+    const existing = await check.json();
+    if (existing.portfolios && existing.portfolios.length) return;
+    for (const p of raw) {
+      await fetch("/api/portfolios", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          name:           p.name || "Portfolio",
+          settings:       p.settings       || {},
+          tickers:        p.tickers        || {},
+          overrides:      p.overrides      || {},
+          bl_views:       p.blViews        || {},
+          custom_weights: p.customWeights  || {},
+          results:        p.results        || null,
+          is_custom:      p.is_custom ? 1 : 0,
+        }),
+      });
+    }
+    localStorage.removeItem("portopt_v2");
+  } catch(e) { /* ignore migration errors */ }
+}
+
+async function init() {
+  await _migrateFromLocalStorage();
+  await _api_loadAll();
+  if (!projects.length) projects = [{...makeProject("Portfolio 1"), id: Date.now()}];
+  activeId = projects[0].id;
+  renderTabs();
+  loadProjectIntoUI(activeProject());
+  onMethodChange();
+  const syms = Object.keys(activeProject().tickers);
+  if (syms.length) fetchStockData(syms);
+}
+init();
