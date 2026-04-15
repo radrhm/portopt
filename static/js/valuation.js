@@ -1,98 +1,364 @@
 /* ═══════════════════════════════════════════════════════════════
    valuation.js  —  Equity Valuation module
-   Multi-tab, 9 models in 4 categories, math workings panel.
-   All calculations client-side; only data fetch hits the server.
+   Workspace-based: each workspace owns its own stocks + inputs,
+   auto-saved to the server in real time.
    ═══════════════════════════════════════════════════════════════ */
 
-// ── State: map tickerKey → { data, id } ──────────────────────────────────────
-const _vStocks = {};   // { AAPL: { data: {...}, id: 'vs-AAPL' }, ... }
-let   _vActive = null; // currently shown ticker key
+// ── Current workspace in-memory caches ───────────────────────────────────────
+const _vStocks = {};    // { TICKER: { data, id } } — current workspace only
+let   _vActive = null;  // currently shown ticker in current workspace
 
-// ── Lists state ───────────────────────────────────────────────────────────────
-let _vLists        = [];   // [{id, name, tickers:[{ticker,name,price}]}]
-let _vAtlTicker    = null; // ticker for which the Add-to-List dropdown is open
-let _vActiveListId = null; // selected list — new stocks are auto-added here
-const _vExpandedLists = new Set(); // IDs of expanded list folders
+// ── Workspaces state ─────────────────────────────────────────────────────────
+let _vWs         = [];    // [{id, name, activeTicker, stocks:[{ticker,name,price,data,inputs}]}]
+let _vActiveWsId = null;  // currently active workspace id
 
-// ── Add stock ─────────────────────────────────────────────────────────────────
+// ── Autosave status ──────────────────────────────────────────────────────────
+let _vSaveTimer = null;
+let _vSaving    = false;
+
+function _setSaveStatus(state) {
+  const el = document.getElementById('val-save-status');
+  if (!el) return;
+  el.className = `val-save-status ${state}`;
+  const label = el.querySelector('.val-save-label');
+  if (label) label.textContent = {
+    idle: 'Saved', saved: 'Saved',
+    dirty: 'Unsaved', saving: 'Saving…', error: 'Save failed'
+  }[state] || '';
+}
+
+function _scheduleSave() {
+  _setSaveStatus('dirty');
+  clearTimeout(_vSaveTimer);
+  _vSaveTimer = setTimeout(_flushSave, 600);
+}
+
+async function _flushSave() {
+  clearTimeout(_vSaveTimer);
+  if (!_vActiveWsId || _vSaving) return;
+  const ws = _vWs.find(w => w.id === _vActiveWsId);
+  if (!ws) return;
+  _syncCurrentWsFromDOM(ws);
+  _vSaving = true;
+  _setSaveStatus('saving');
+  try {
+    const res = await fetch(`/api/valuation/lists/${ws.id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: ws.name,
+        tickers: { active: ws.activeTicker, stocks: ws.stocks }
+      })
+    });
+    if (!res.ok) throw new Error();
+    _setSaveStatus('saved');
+  } catch (_) {
+    _setSaveStatus('error');
+  } finally {
+    _vSaving = false;
+  }
+}
+
+// Capture current DOM state into the workspace object
+function _syncCurrentWsFromDOM(ws) {
+  ws.activeTicker = _vActive;
+  ws.stocks = Object.keys(_vStocks).map(tk => {
+    const s = _vStocks[tk];
+    const inputs = {};
+    document.querySelectorAll(`#vs-${tk} input[type=number]`).forEach(inp => {
+      const key = inp.id.startsWith(`${tk}-`) ? inp.id.slice(tk.length + 1) : inp.id;
+      inputs[key] = inp.value;
+    });
+    return {
+      ticker: tk,
+      name:  s.data?.name || tk,
+      price: s.data?.current_price || 0,
+      data:  s.data,
+      inputs,
+    };
+  });
+}
+
+// ── Workspace lifecycle ──────────────────────────────────────────────────────
+
+function _wsNormalize(row) {
+  // Support both legacy (array) and new ({active,stocks}) tickers shapes
+  let t = row.tickers, active = null, stocks = [];
+  if (Array.isArray(t)) {
+    stocks = t.map(x => ({
+      ticker: x.ticker, name: x.name, price: x.price,
+      data: x.data || null, inputs: x.inputs || {}
+    }));
+  } else if (t && typeof t === 'object') {
+    active = t.active || null;
+    stocks = Array.isArray(t.stocks) ? t.stocks : [];
+  }
+  return { id: row.id, name: row.name, activeTicker: active, stocks };
+}
+
+async function valNewWorkspace(initialName) {
+  if (_vActiveWsId) await _flushSave();
+  const name = initialName || `Workspace ${_vWs.length + 1}`;
+  try {
+    const res = await fetch('/api/valuation/lists', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name})
+    });
+    const row = await res.json();
+    const ws  = _wsNormalize(row);
+    _vWs.push(ws);
+    await _activateWorkspace(ws.id, true);
+    _renderWsTabs();
+  } catch (_) {
+    _valToast('Failed to create workspace.');
+  }
+}
+
+async function valDeleteWorkspace(id) {
+  if (!confirm('Delete this workspace and all its stocks?')) return;
+  try { await fetch(`/api/valuation/lists/${id}`, {method: 'DELETE'}); } catch (_) {}
+  _vWs = _vWs.filter(w => w.id !== id);
+  if (_vActiveWsId === id) {
+    _vActiveWsId = null;
+    _clearDOM();
+    if (_vWs.length) {
+      await _activateWorkspace(_vWs[0].id, true);
+    } else {
+      await valNewWorkspace('Workspace 1');
+      return;
+    }
+  }
+  _renderWsTabs();
+}
+
+async function valSwitchWorkspace(id) {
+  if (id === _vActiveWsId) return;
+  await _activateWorkspace(id, false);
+  _renderWsTabs();
+}
+
+async function _activateWorkspace(id, skipSave) {
+  if (!skipSave && _vActiveWsId) await _flushSave();
+  _clearDOM();
+  _vActiveWsId = id;
+  const ws = _vWs.find(w => w.id === id);
+  if (!ws) return;
+
+  // Rebuild _vStocks + DOM panels from stored workspace
+  for (const s of (ws.stocks || [])) {
+    if (s.data) {
+      _vStocks[s.ticker] = { data: s.data, id: `vs-${s.ticker}` };
+      _renderStockPanel(s.ticker, s.data);
+      _restoreInputs(s.ticker, s.inputs || {});
+    } else {
+      await _fetchAndRenderStock(s.ticker, s.inputs);
+    }
+  }
+
+  const first = (ws.activeTicker && _vStocks[ws.activeTicker])
+    ? ws.activeTicker
+    : Object.keys(_vStocks)[0];
+  if (first) valSwitchStock(first, /*silent*/true);
+  else {
+    const e = document.getElementById('val-empty-state');
+    if (e) e.style.display = 'block';
+  }
+  _renderSidebarStocks();
+  _setSaveStatus('idle');
+}
+
+function _clearDOM() {
+  const c = document.getElementById('val-stocks-container');
+  if (c) c.querySelectorAll('.val-stock-panel').forEach(el => el.remove());
+  for (const k of Object.keys(_vStocks)) delete _vStocks[k];
+  _vActive = null;
+  const empty = document.getElementById('val-empty-state');
+  if (empty) empty.style.display = 'block';
+}
+
+function _restoreInputs(ticker, inputs) {
+  for (const [key, val] of Object.entries(inputs || {})) {
+    const id = key.startsWith(`${ticker}-`) ? key : `${ticker}-${key}`;
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  }
+  _recalcTicker(ticker);
+}
+
+async function _fetchAndRenderStock(ticker, inputs) {
+  try {
+    const res  = await fetch(`/api/valuation/financials?ticker=${encodeURIComponent(ticker)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error();
+    _vStocks[ticker] = { data, id: `vs-${ticker}` };
+    _renderStockPanel(ticker, data);
+    if (inputs) _restoreInputs(ticker, inputs);
+  } catch (_) {}
+}
+
+// ── Workspace tab rendering (top bar) ────────────────────────────────────────
+
+function _renderWsTabs() {
+  const c = document.getElementById('ws-tabs-container');
+  if (!c) return;
+  c.innerHTML = _vWs.map(ws => {
+    const active = ws.id === _vActiveWsId;
+    const hasStocks = (ws.stocks || []).length > 0;
+    return `
+    <button class="tab${active ? ' active' : ''}${hasStocks ? ' has-results' : ''}"
+            onclick="valSwitchWorkspace(${ws.id})" data-id="${ws.id}">
+      <span class="tab-dot"></span>
+      <span class="tab-name"
+            ondblclick="_startRenameWs(event,${ws.id})"
+            onblur="_finishRenameWs(event,${ws.id})"
+            contenteditable="false"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+            id="ws-name-${ws.id}">${_escHtml(ws.name)}</span>
+      ${_vWs.length > 1 ? `<span class="tab-close" onclick="event.stopPropagation();valDeleteWorkspace(${ws.id})">×</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+function _startRenameWs(e, id) {
+  e.stopPropagation();
+  const el = document.getElementById(`ws-name-${id}`);
+  if (!el) return;
+  el.contentEditable = 'true';
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+}
+
+function _finishRenameWs(e, id) {
+  const el = e.target;
+  el.contentEditable = 'false';
+  const ws = _vWs.find(w => w.id === id);
+  if (!ws) return;
+  const nn = (el.textContent || '').trim() || ws.name;
+  if (nn !== ws.name) {
+    ws.name = nn;
+    _scheduleSave();
+  }
+}
+
+// ── Sidebar (stock list for current workspace) ───────────────────────────────
+
+function _renderSidebarStocks() {
+  const c = document.getElementById('val-sidebar-stocks');
+  if (!c) return;
+  const tickers = Object.keys(_vStocks);
+  if (!tickers.length) {
+    c.innerHTML = '<div class="val-sidebar-empty">No stocks yet.<br/>Add a ticker above.</div>';
+    return;
+  }
+  c.innerHTML = tickers.map(tk => {
+    const s = _vStocks[tk];
+    const d = s.data;
+    const active = tk === _vActive;
+    const loading = s.loading;
+    const nm = d?.name ? _escHtml(String(d.name)).slice(0, 22) : '';
+    const pr = d ? _fp(d.current_price, d.currency) : '';
+    return `
+    <div class="val-side-stock${active ? ' active' : ''}" onclick="valSwitchStock('${tk}')">
+      <div class="val-side-sym">${tk}${loading ? ' <span class="val-side-loading"></span>' : ''}</div>
+      <div class="val-side-meta">
+        <span class="val-side-name">${nm}</span>
+        <span class="val-side-price">${pr}</span>
+      </div>
+      <button class="val-side-close" onclick="event.stopPropagation();valRemoveStock('${tk}')" title="Remove">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Add / remove / switch stock ──────────────────────────────────────────────
 
 async function valAddStock() {
   const raw    = document.getElementById('val-ticker-input').value.trim().toUpperCase();
   const ticker = raw.replace(/[^A-Z0-9.\-]/g, '');
   const statusEl = document.getElementById('val-status');
   if (!ticker) { statusEl.textContent = 'Enter a ticker.'; return; }
-  if (_vStocks[ticker]) { valSwitchTab(ticker); return; }
+  if (_vStocks[ticker]) { valSwitchStock(ticker); return; }
+  if (!_vActiveWsId) { await valNewWorkspace('Workspace 1'); }
 
   statusEl.textContent = '';
   document.getElementById('val-ticker-input').value = '';
 
-  // Create a loading tab immediately
-  _vStocks[ticker] = { data: null, id: `vs-${ticker}` };
-  _renderTab(ticker, null, true);
-  valSwitchTab(ticker);
+  _vStocks[ticker] = { data: null, id: `vs-${ticker}`, loading: true };
+  _renderSidebarStocks();
 
   try {
     const res  = await fetch(`/api/valuation/financials?ticker=${encodeURIComponent(ticker)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fetch failed.');
-    _vStocks[ticker].data     = data;
-    _vStocks[ticker].cachedAt = Date.now();
-    _renderTab(ticker, data, false);
+    _vStocks[ticker].data = data;
+    _vStocks[ticker].loading = false;
     _renderStockPanel(ticker, data);
-    valSwitchTab(ticker);
-    // Auto-add to the active list (folder)
-    if (_vActiveListId !== null) valAddToList(_vActiveListId, ticker);
-    _saveValState();
+    valSwitchStock(ticker);
+    _renderSidebarStocks();
+    _scheduleSave();
   } catch (e) {
+    delete _vStocks[ticker];
     statusEl.textContent = e.message;
-    _removeTab(ticker);
+    _renderSidebarStocks();
   }
 }
 
-// ── Tab management ────────────────────────────────────────────────────────────
-
-function valSwitchTab(ticker) {
+function valSwitchStock(ticker, silent) {
   _vActive = ticker;
-  // Deactivate all tabs & panels
-  document.querySelectorAll('.val-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.val-stock-panel').forEach(p => p.classList.remove('active'));
-  // Activate target
-  const tabEl   = document.getElementById(`vtab-${ticker}`);
-  const panelEl = document.getElementById(`vs-${ticker}`);
-  if (tabEl)   tabEl.classList.add('active');
-  if (panelEl) panelEl.classList.add('active');
-  // Hide empty state
-  document.getElementById('val-empty-state').style.display =
-    Object.keys(_vStocks).length ? 'none' : 'block';
+  document.getElementById(`vs-${ticker}`)?.classList.add('active');
+  const empty = document.getElementById('val-empty-state');
+  if (empty) empty.style.display = Object.keys(_vStocks).length ? 'none' : 'block';
+  _renderSidebarStocks();
+  if (silent) return;
+  const ws = _vWs.find(w => w.id === _vActiveWsId);
+  if (ws && ws.activeTicker !== ticker) {
+    ws.activeTicker = ticker;
+    _scheduleSave();
+  }
 }
 
-function _removeTab(ticker) {
+function valRemoveStock(ticker) {
+  if (!confirm(`Remove ${ticker} from this workspace?`)) return;
   delete _vStocks[ticker];
-  document.getElementById(`vtab-${ticker}`)?.remove();
   document.getElementById(`vs-${ticker}`)?.remove();
   const remaining = Object.keys(_vStocks);
-  if (remaining.length) valSwitchTab(remaining[remaining.length - 1]);
-  else document.getElementById('val-empty-state').style.display = 'block';
-  _saveValState();
+  if (remaining.length) valSwitchStock(remaining[remaining.length - 1]);
+  else {
+    _vActive = null;
+    const e = document.getElementById('val-empty-state');
+    if (e) e.style.display = 'block';
+  }
+  _renderSidebarStocks();
+  _scheduleSave();
 }
 
-function _renderTab(ticker, data, loading) {
-  const container = document.getElementById('val-tabs-container');
-  let tab = document.getElementById(`vtab-${ticker}`);
-  if (!tab) {
-    tab = document.createElement('button');
-    tab.className = 'val-tab';
-    tab.id        = `vtab-${ticker}`;
-    tab.onclick   = () => valSwitchTab(ticker);
-    container.appendChild(tab);
+// ── Convert current workspace → portfolio ────────────────────────────────────
+
+async function valConvertCurrentWs() {
+  if (!_vActiveWsId) return;
+  const ws = _vWs.find(w => w.id === _vActiveWsId);
+  if (!ws || !Object.keys(_vStocks).length) {
+    _valToast('Add stocks to the workspace first.');
+    return;
   }
-  const price = data ? _fp(data.current_price, data.currency) : '';
-  tab.innerHTML = `
-    ${loading ? `<span class="val-tab-loading"></span>` : ''}
-    <span class="val-tab-ticker">${ticker}</span>
-    ${price ? `<span class="val-tab-price">${price}</span>` : ''}
-    <button class="val-tab-close" onclick="event.stopPropagation();_removeTab('${ticker}')" title="Close">×</button>`;
+  await _flushSave();
+  try {
+    const res  = await fetch(`/api/valuation/lists/${ws.id}/to-portfolio`, {method: 'POST'});
+    const data = await res.json();
+    if (data.portfolio_id) {
+      _valToast(`"${ws.name}" saved as portfolio — `, 'Open Portfolio Optimizer', '/');
+    }
+  } catch (_) { _valToast('Conversion failed.'); }
 }
+
+// Flush pending save on page unload
+window.addEventListener('beforeunload', () => {
+  if (_vSaveTimer) { clearTimeout(_vSaveTimer); _flushSave(); }
+});
 
 // ── Render stock panel ────────────────────────────────────────────────────────
 
@@ -118,9 +384,9 @@ function _renderStockPanel(ticker, d) {
 
   container.appendChild(panel);
 
-  // Bind all inputs to recalc
+  // Bind all inputs to recalc + autosave
   panel.querySelectorAll('input[type=number]').forEach(inp => {
-    inp.addEventListener('input', () => _recalcTicker(ticker));
+    inp.addEventListener('input', () => { _recalcTicker(ticker); _scheduleSave(); });
   });
 
   // Initial calc + static historical charts
@@ -153,15 +419,9 @@ function _stockHeaderHTML(d) {
         ${d.dividend_annual ? `<span class="val-chip green">Div $${d.dividend_annual} (${d.dividend_yield.toFixed(1)}%)</span>` : '<span class="val-chip">No Dividend</span>'}
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-      <div>
-        <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
-      </div>
-      <button class="val-save-list-btn" onclick="valShowAddToList('${d.ticker}')">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        Save to List ▾
-      </button>
+    <div style="text-align:right;flex-shrink:0;">
+      <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
     </div>
   </div>`;
 }
@@ -998,77 +1258,31 @@ function _renderModelCharts(tk, d) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// LISTS MANAGEMENT
+// INIT: load workspaces from server on page load
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── LocalStorage persistence ──────────────────────────────────────────────────
-const _VAL_CACHE_KEY = 'portopt_val_v1';
-const _VAL_CACHE_TTL = 8 * 60 * 60 * 1000; // 8 hours
-
-function _saveValState() {
-  try {
-    const payload = {
-      stocks:     {},
-      activeList: _vActiveListId,
-      expanded:   [..._vExpandedLists],
-    };
-    for (const [ticker, stock] of Object.entries(_vStocks)) {
-      if (stock.data) {
-        payload.stocks[ticker] = { data: stock.data, cachedAt: stock.cachedAt || Date.now() };
-      }
-    }
-    localStorage.setItem(_VAL_CACHE_KEY, JSON.stringify(payload));
-  } catch (_) {} // quota exceeded — silently ignore
-}
-
-function _restoreValState() {
-  try {
-    const raw = localStorage.getItem(_VAL_CACHE_KEY);
-    if (!raw) return;
-    const state = JSON.parse(raw);
-
-    // Restore active list + expanded folders (validate IDs still exist in DB)
-    if (state.activeList != null && _vLists.some(l => l.id === state.activeList)) {
-      _vActiveListId = state.activeList;
-    }
-    if (Array.isArray(state.expanded)) {
-      state.expanded
-        .filter(id => _vLists.some(l => l.id === id))
-        .forEach(id => _vExpandedLists.add(id));
-    }
-
-    // Restore open stock tabs from cache (skip if older than TTL)
-    const now = Date.now();
-    for (const [ticker, stock] of Object.entries(state.stocks || {})) {
-      if (!stock.data) continue;
-      if ((now - (stock.cachedAt || 0)) > _VAL_CACHE_TTL) continue;
-      _vStocks[ticker] = { data: stock.data, id: `vs-${ticker}`, cachedAt: stock.cachedAt };
-      _renderTab(ticker, stock.data, false);
-      _renderStockPanel(ticker, stock.data);
-    }
-
-    // Show the last tab
-    const tickers = Object.keys(_vStocks);
-    if (tickers.length > 0) valSwitchTab(tickers[tickers.length - 1]);
-  } catch (_) {}
-}
-
-// ── Init: load lists from server on page load ─────────────────────────────────
-async function valListsInit() {
+async function valInit() {
   _loadModelSettings();
   try {
     const res = await fetch('/api/valuation/lists');
-    if (res.ok) _vLists = await res.json();
+    if (res.ok) {
+      const rows = await res.json();
+      _vWs = (rows || []).map(_wsNormalize);
+    }
   } catch (_) {}
-  _restoreValState(); // restore tabs + active/expanded state before rendering
-  _renderLists();
+  if (!_vWs.length) {
+    await valNewWorkspace('Workspace 1');
+  } else {
+    // Activate the most recently updated workspace (first in DESC-sorted list)
+    await _activateWorkspace(_vWs[0].id, true);
+  }
+  _renderWsTabs();
+  _setSaveStatus('idle');
 }
 
-// ── Render sidebar ────────────────────────────────────────────────────────────
-function _renderLists() {
-  const container = document.getElementById('val-lists-container');
-  if (!container) return;
-
+// ── (obsolete list rendering, kept as dead-code stub) ────────────────────────
+function _renderLists_OBSOLETE() { /* removed */ }
+/* DEAD_LIST_CODE_START
   if (!_vLists.length) {
     container.innerHTML = '<div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one,<br/>then add stocks to it.</div>';
     return;
@@ -1349,11 +1563,7 @@ function _atlOutsideClick(e) {
   else document.addEventListener('click', _atlOutsideClick, {once: true, capture: true});
 }
 
-function _hideAtlDropdown() {
-  const dd = document.getElementById('val-atl-dropdown');
-  if (dd) dd.style.display = 'none';
-  _vAtlTicker = null;
-}
+DEAD_LIST_CODE_END */
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let _toastTimer = null;
@@ -1487,4 +1697,4 @@ function _renderSettingsPanel() {
 }
 
 // ── Bootstrap on load ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', valListsInit);
+document.addEventListener('DOMContentLoaded', valInit);

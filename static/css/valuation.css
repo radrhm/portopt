@@ -1,235 +1,179 @@
-/* Valuation page layout — standalone, no portfolio grid dependency */
+/* Valuation page — workspace-based layout */
 
 .val-app {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 260px 1fr;
   grid-template-rows: auto auto 1fr;
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
 }
 
-/* Header reuse from app.css — just ensure it spans full width */
-.val-app .app-header-top {
-  grid-column: 1 / -1;
-}
+/* Header + workspace tabs row span both columns */
+.val-app .app-header-top { grid-column: 1 / -1; }
+.val-app .app-tabs-row   { grid-column: 1 / -1; }
 
-/* ── STOCK TABS + SEARCH ROW ─────────────────────────────────── */
-.val-tabs-row {
-  display: flex;
-  align-items: stretch;
-  background: #0d1626;
-  border-bottom: 1px solid var(--border);
-  min-height: 40px;
-  overflow: hidden;
-  grid-column: 1 / -1;
-}
-
-.val-tab {
+/* ── SAVE STATUS INDICATOR ─────────────────────────────────── */
+.val-save-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 14px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 600;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: all .15s;
-  min-height: 40px;
-}
-.val-tab:hover { color: var(--text); }
-.val-tab.active { color: var(--text); border-bottom-color: var(--accent2); }
-.val-tab-ticker { font-weight: 800; font-size: 12px; }
-.val-tab-price  { font-size: 10px; color: var(--green); }
-.val-tab-close  {
-  width: 14px; height: 14px; border-radius: 3px; border: none;
-  background: transparent; color: var(--muted); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; line-height: 1; padding: 0; opacity: 0;
-  transition: opacity .15s; margin-left: 2px;
-}
-.val-tab:hover .val-tab-close { opacity: 1; }
-.val-tab-close:hover { color: var(--red); }
-.val-tab-loading {
-  width: 12px; height: 12px;
-  border: 2px solid rgba(255,255,255,.15);
-  border-top-color: var(--accent2);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-  flex-shrink: 0;
-}
-
-.val-search-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  border-left: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.val-search-inline input {
-  background: #0a1020;
+  color: var(--muted);
+  background: rgba(255,255,255,.03);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 9px;
-  color: var(--text);
-  font-size: 12px;
-  outline: none;
-  width: 160px;
-  transition: border .15s, width .2s;
+  transition: all .2s;
+  user-select: none;
 }
-.val-search-inline input:focus { border-color: var(--accent); width: 200px; }
+.val-save-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.val-save-status.idle,
+.val-save-status.saved   { color: var(--green); }
+.val-save-status.dirty   { color: var(--gold); }
+.val-save-status.saving  { color: var(--accent2); }
+.val-save-status.saving .val-save-dot {
+  animation: savePulse 1s ease-in-out infinite;
+}
+.val-save-status.error   { color: var(--red); }
+@keyframes savePulse {
+  0%, 100% { opacity: .4; }
+  50%      { opacity: 1;  }
+}
 
-/* ── WORKSPACE (body + sidebar) ─────────────────────────────── */
-.val-workspace {
-  display: grid;
-  grid-template-columns: 1fr 220px;
+/* ── LEFT SIDEBAR ──────────────────────────────────────────── */
+.val-sidebar {
+  grid-column: 1;
+  grid-row: 3;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
-/* ── LISTS SIDEBAR ───────────────────────────────────────────── */
-#val-lists-sidebar {
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--border);
-  background: #080f1e;
-  overflow: hidden;
-}
-
-.val-lists-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px 8px;
+.val-sidebar-head {
+  padding: 14px 14px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.val-lists-title {
+
+.val-sidebar-search {
+  display: flex;
+  gap: 6px;
+}
+.val-sidebar-search input {
+  flex: 1;
+  background: #0a1020;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border .15s;
+  min-width: 0;
+}
+.val-sidebar-search input:focus { border-color: var(--accent); }
+
+.val-sidebar-status {
+  font-size: 11px;
+  color: var(--red);
+  margin-top: 6px;
+  min-height: 14px;
+}
+
+.val-sidebar-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px 12px;
+  min-height: 0;
+}
+.val-sidebar-title {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--muted);
+  padding: 0 4px 8px;
 }
-.val-lists-new-btn {
-  display: inline-flex;
-  align-items: center;
+
+.val-sidebar-stocks {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 3px 7px;
-  transition: all .15s;
 }
-.val-lists-new-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-
-#val-lists-container {
-  overflow-y: auto;
-  flex: 1;
-  padding: 6px 0;
-}
-
-.val-lists-empty {
-  padding: 20px 14px;
+.val-sidebar-empty {
+  padding: 24px 12px;
   font-size: 11px;
   color: var(--muted);
   line-height: 1.7;
   text-align: center;
+  font-style: italic;
 }
 
-/* ── LIST ITEM ───────────────────────────────────────────────── */
-.val-list-item {
-  margin: 0;
+/* Stock row in sidebar */
+.val-side-stock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  background: #0a1020;
 }
+.val-side-stock:hover {
+  background: #0f1829;
+  border-color: var(--border);
+}
+.val-side-stock.active {
+  background: rgba(6,182,212,.08);
+  border-color: var(--accent2);
+}
+.val-side-stock.active .val-side-sym { color: var(--accent2); }
 
-.val-list-row {
+.val-side-sym {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .02em;
+}
+.val-side-meta {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px 6px 12px;
-  cursor: pointer;
-  transition: background .1s;
-  min-height: 30px;
+  justify-content: space-between;
+  gap: 6px;
 }
-.val-list-row:hover { background: rgba(255,255,255,.04); }
-.val-list-row.expanded { background: rgba(99,102,241,.06); }
-.val-list-row.active-list {
-  background: rgba(99,102,241,.14);
-  border-left: 2px solid var(--accent2);
-  padding-left: 10px;
-}
-.val-list-row.active-list .val-list-name { color: var(--accent2); }
-
-.val-list-chevron {
-  color: var(--muted);
-  flex-shrink: 0;
-  transition: transform .15s;
-  line-height: 1;
+.val-side-name {
   font-size: 10px;
-  width: 10px;
-}
-.val-list-row.expanded .val-list-chevron { transform: rotate(90deg); }
-
-.val-list-name {
-  flex: 1;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
-}
-.val-list-name-input {
   flex: 1;
-  background: #0a1020;
-  border: 1px solid var(--accent);
-  border-radius: 3px;
-  padding: 1px 5px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  outline: none;
   min-width: 0;
 }
-
-.val-list-active-dot {
-  font-size: 6px;
-  color: var(--accent2);
-  flex-shrink: 0;
-  margin: 0 2px;
-  opacity: .9;
-}
-
-.val-list-count {
-  font-size: 9px;
+.val-side-price {
+  font-size: 10px;
   font-weight: 700;
-  color: var(--muted);
-  background: rgba(255,255,255,.07);
-  border-radius: 8px;
-  padding: 1px 5px;
+  color: var(--green);
   flex-shrink: 0;
 }
 
-.val-list-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity .15s;
-}
-.val-list-row:hover .val-list-actions { opacity: 1; }
-
-.val-list-btn {
+.val-side-close {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
   width: 18px;
   height: 18px;
   border: none;
@@ -240,97 +184,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1;
   padding: 0;
-  transition: all .1s;
-}
-.val-list-btn:hover { background: rgba(255,255,255,.08); color: var(--text); }
-.val-list-btn.convert:hover { color: var(--accent2); }
-.val-list-btn.del:hover { color: var(--red); }
-
-/* ── TICKER SUB-LIST ─────────────────────────────────────────── */
-.val-list-tickers {
-  display: none;
-  padding: 2px 0 4px 22px;
-  border-bottom: 1px solid rgba(255,255,255,.04);
-}
-.val-list-tickers.open { display: block; }
-
-.val-list-ticker-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px 3px 0;
-  font-size: 11px;
-  color: var(--muted2);
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background .1s;
-}
-.val-list-ticker-row:hover { background: rgba(255,255,255,.04); color: var(--text); }
-
-.val-list-ticker-sym {
-  font-weight: 700;
-  font-size: 11px;
-  color: var(--text);
-  flex: 1;
-}
-.val-list-ticker-price {
-  font-size: 10px;
-  color: var(--green);
-}
-.val-list-ticker-del {
-  width: 14px; height: 14px; border: none; background: transparent;
-  color: var(--muted); cursor: pointer; display: flex; align-items: center;
-  justify-content: center; font-size: 13px; padding: 0; opacity: 0;
-  transition: opacity .1s; flex-shrink: 0; border-radius: 2px;
-}
-.val-list-ticker-row:hover .val-list-ticker-del { opacity: 1; }
-.val-list-ticker-del:hover { color: var(--red); }
-
-.val-list-tickers-empty {
-  font-size: 10px;
-  color: var(--muted);
-  padding: 4px 0 2px;
-  font-style: italic;
-}
-
-/* ── CONVERT TOOLTIP / CONFIRM ───────────────────────────────── */
-.val-list-convert-confirm {
-  padding: 8px 12px 8px 22px;
-  font-size: 10px;
-  color: var(--muted);
-  background: rgba(99,102,241,.07);
-  border-top: 1px solid rgba(99,102,241,.15);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.val-list-convert-btn {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent2);
-  background: transparent;
-  border: 1px solid var(--accent2);
-  border-radius: 4px;
-  padding: 2px 8px;
-  cursor: pointer;
+  opacity: 0;
   transition: all .15s;
-  white-space: nowrap;
 }
-.val-list-convert-btn:hover { background: var(--accent2); color: #fff; }
+.val-side-stock:hover .val-side-close { opacity: 1; }
+.val-side-close:hover { color: var(--red); background: rgba(239,68,68,.1); }
 
-/* ── SCROLLABLE BODY ─────────────────────────────────────────── */
+.val-side-loading {
+  width: 10px; height: 10px;
+  border: 2px solid rgba(255,255,255,.15);
+  border-top-color: var(--accent2);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+
+.val-sidebar-footer {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ── BODY ──────────────────────────────────────────────────── */
 .val-body {
+  grid-column: 2;
+  grid-row: 3;
   overflow-y: auto;
   overflow-x: hidden;
+  background: var(--bg);
 }
 
-/* ── STOCK PANELS ────────────────────────────────────────────── */
+/* ── STOCK PANELS ──────────────────────────────────────────── */
 .val-stock-panel { display: none; padding: 20px 24px 40px; }
 .val-stock-panel.active { display: block; }
 
-/* ── STOCK HEADER BAND ───────────────────────────────────────── */
+/* ── STOCK HEADER BAND ─────────────────────────────────────── */
 .val-stock-header {
   display: flex;
   align-items: center;
@@ -357,82 +248,7 @@
 .val-chip.green { color: var(--green); background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.2); }
 .val-chip.red   { color: var(--red);   background: rgba(239,68,68,.1);  border-color: rgba(239,68,68,.2);  }
 
-/* ── SAVE TO LIST BUTTON (in stock header) ───────────────────── */
-.val-save-list-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 5px 10px;
-  transition: all .15s;
-  white-space: nowrap;
-  margin-left: auto;
-}
-.val-save-list-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-
-/* ── ADD-TO-LIST DROPDOWN ────────────────────────────────────── */
-.val-atl-dropdown {
-  position: fixed;
-  z-index: 9999;
-  background: #0d1626;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.6);
-  min-width: 180px;
-  padding: 6px 0;
-}
-.val-atl-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 4px 12px 6px;
-}
-.val-atl-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--text);
-  cursor: pointer;
-  transition: background .1s;
-}
-.val-atl-item:hover { background: rgba(255,255,255,.06); }
-.val-atl-item.checked .val-atl-check { color: var(--green); }
-.val-atl-item:not(.checked) .val-atl-check { color: transparent; }
-.val-atl-check { width: 12px; flex-shrink: 0; font-size: 11px; }
-.val-atl-divider { border-top: 1px solid var(--border); margin: 4px 0; }
-.val-atl-new {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  color: var(--muted2);
-  font-size: 11px;
-  cursor: pointer;
-  transition: color .1s;
-  text-align: left;
-}
-.val-atl-new:hover { color: var(--accent2); }
-.val-atl-no-lists {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 4px 12px 6px;
-  font-style: italic;
-}
-
-/* ── TOAST ───────────────────────────────────────────────────── */
+/* ── TOAST ─────────────────────────────────────────────────── */
 .val-toast {
   position: fixed;
   bottom: 28px;
@@ -459,7 +275,7 @@
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-/* ── COMPARE CHART ───────────────────────────────────────────── */
+/* ── COMPARE CHART ─────────────────────────────────────────── */
 .val-compare-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -468,7 +284,7 @@
   margin-bottom: 24px;
 }
 
-/* ── CATEGORY SECTION ────────────────────────────────────────── */
+/* ── CATEGORY SECTION ──────────────────────────────────────── */
 .val-category { margin-bottom: 28px; }
 .val-category-title {
   font-size: 10px; font-weight: 700; letter-spacing: .1em;
@@ -477,14 +293,14 @@
   margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
 }
 
-/* ── MODEL GRID ──────────────────────────────────────────────── */
+/* ── MODEL GRID ────────────────────────────────────────────── */
 .val-methods-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
   gap: 14px;
 }
 
-/* ── VALUATION CARD ──────────────────────────────────────────── */
+/* ── VALUATION CARD ────────────────────────────────────────── */
 .val-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -502,7 +318,7 @@
 .val-card-result.sml { font-size: 14px; }
 .val-card-body     { padding: 12px 14px; }
 
-/* ── FCF HISTORY TABLE ───────────────────────────────────────── */
+/* ── FCF HISTORY TABLE ─────────────────────────────────────── */
 .val-fcf-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
 .val-fcf-table th {
   text-align: left; padding: 4px 8px; background: #0a1020; color: var(--muted);
@@ -512,7 +328,7 @@
 .val-fcf-table .pos { color: var(--green); font-weight: 600; }
 .val-fcf-table .neg { color: var(--red);   font-weight: 600; }
 
-/* ── INPUTS ──────────────────────────────────────────────────── */
+/* ── INPUTS ────────────────────────────────────────────────── */
 .val-inputs-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -529,7 +345,7 @@
 .val-inp-group input:focus { border-color: var(--accent); }
 .val-inp-hint { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
 
-/* ── UPSIDE / DOWNSIDE ───────────────────────────────────────── */
+/* ── UPSIDE / DOWNSIDE ─────────────────────────────────────── */
 .val-updown {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 6px;
@@ -539,7 +355,7 @@
 .val-updown.down    { background: rgba(239,68,68,.1);  color: var(--red);   border: 1px solid rgba(239,68,68,.2);  }
 .val-updown.neutral { background: rgba(100,116,139,.1); color: var(--muted); border: 1px solid var(--border); }
 
-/* ── SHOW WORKINGS ───────────────────────────────────────────── */
+/* ── SHOW WORKINGS ─────────────────────────────────────────── */
 .val-workings-btn {
   display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
   background: transparent; border: 1px solid var(--border); border-radius: 5px;
@@ -558,7 +374,7 @@
 .val-workings-panel .step-eq    { color: var(--text); font-family: monospace; font-size: 11px; }
 .val-workings-panel .step-label { color: var(--muted); font-size: 10px; margin-top: 1px; }
 
-/* ── TWO RESULTS ─────────────────────────────────────────────── */
+/* ── TWO RESULTS ───────────────────────────────────────────── */
 .val-two-results { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .val-two-item {
   display: flex; align-items: center; gap: 8px;
@@ -567,7 +383,7 @@
 }
 .val-two-label { font-size: 10px; color: var(--muted); flex: 1; }
 
-/* ── MODEL MINI CHART ────────────────────────────────────────── */
+/* ── MODEL MINI CHART ──────────────────────────────────────── */
 .val-mchart {
   height: 130px;
   margin-bottom: 10px;
@@ -578,7 +394,7 @@
 }
 .val-mchart:empty { display: none; }
 
-/* ── SETTINGS BUTTON (in tabs/search row) ────────────────────── */
+/* ── SETTINGS BUTTON (in tabs row) ─────────────────────────── */
 .val-settings-btn {
   display: inline-flex;
   align-items: center;
@@ -598,7 +414,7 @@
 .val-settings-btn:hover,
 .val-settings-btn.active { border-color: var(--accent2); color: var(--accent2); }
 
-/* ── SETTINGS PANEL (floating) ───────────────────────────────── */
+/* ── SETTINGS PANEL (floating) ─────────────────────────────── */
 .val-settings-panel {
   position: fixed;
   width: 238px;
@@ -663,9 +479,11 @@
   width: 13px; height: 13px;
 }
 
-/* ── NOTE ────────────────────────────────────────────────────── */
+/* ── NOTE ──────────────────────────────────────────────────── */
 .val-note {
   background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
   color: var(--gold); border-radius: 6px;
   padding: 7px 10px; font-size: 11px; line-height: 1.5;
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }

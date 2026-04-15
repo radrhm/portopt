@@ -73,10 +73,18 @@ def convert_list_to_portfolio(lid):
     lst = get_val_list(lid)
     if not lst:
         return jsonify({"error": "not found"}), 404
+    # Handle both legacy array shape and new {active, stocks} workspace shape
+    raw = lst.get("tickers")
+    if isinstance(raw, dict):
+        items = raw.get("stocks") or []
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
     # Build tickers dict matching the portfolio schema: {TICKER: {name, price}}
     tickers_dict = {}
-    for t in lst["tickers"]:
-        sym = t.get("ticker", "")
+    for t in items:
+        sym = (t or {}).get("ticker", "")
         if sym:
             tickers_dict[sym] = {"name": t.get("name", sym), "price": t.get("price", 0)}
     pid = save_portfolio({

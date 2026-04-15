@@ -35,75 +35,72 @@
       Equity Valuation
     </a>
   </nav>
+  <div id="val-save-status" class="val-save-status idle" style="margin-left:auto;">
+    <span class="val-save-dot"></span>
+    <span class="val-save-label">Saved</span>
+  </div>
 </div>
 
-<!-- ══ STOCK TABS + SEARCH ROW ══════════════════════════════════════════ -->
-<div class="val-tabs-row" id="val-tabs-row">
-  <div id="val-tabs-container" style="display:flex;align-items:stretch;flex:1;overflow-x:auto;min-width:0;"></div>
-  <div class="val-search-inline">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-         style="color:var(--muted);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input type="text" id="val-ticker-input" placeholder="Add ticker…"
-           autocomplete="off" spellcheck="false"
-           onkeydown="if(event.key==='Enter')valAddStock()"/>
-    <button class="btn btn-primary btn-sm" onclick="valAddStock()" id="val-search-btn">Add</button>
-    <span id="val-status" style="font-size:11px;color:var(--red);margin-left:6px;white-space:nowrap;"></span>
-    <button class="val-settings-btn" onclick="valToggleSettings()" id="val-settings-btn" title="Choose which models to display">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14M12 2v2M12 20v2M2 12h2M20 12h2"/>
-      </svg>
-      Models
+<!-- ══ WORKSPACE TABS ROW ══════════════════════════════════════════════ -->
+<div class="app-tabs-row">
+  <div id="ws-tabs-container" style="display:flex;align-items:stretch;"></div>
+  <button class="tab-new" id="ws-new-btn" title="New workspace" onclick="valNewWorkspace()">＋</button>
+  <div style="flex:1;"></div>
+  <button class="val-settings-btn" onclick="valToggleSettings()" id="val-settings-btn" title="Choose which models to display" style="margin:auto 12px;">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14M12 2v2M12 20v2M2 12h2M20 12h2"/>
+    </svg>
+    Models
+  </button>
+</div>
+
+<!-- ══ LEFT SIDEBAR ════════════════════════════════════════════════════ -->
+<aside class="val-sidebar" id="val-sidebar">
+
+  <div class="val-sidebar-head">
+    <div class="sec-title" style="margin-bottom:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Add Stocks
+    </div>
+    <div class="val-sidebar-search">
+      <input type="text" id="val-ticker-input" placeholder="Ticker: AAPL, TSLA…"
+             maxlength="10" autocomplete="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter')valAddStock()"/>
+      <button class="btn btn-primary btn-sm" onclick="valAddStock()" id="val-add-btn">Add</button>
+    </div>
+    <div id="val-status" class="val-sidebar-status"></div>
+  </div>
+
+  <div class="val-sidebar-section">
+    <div class="val-sidebar-title">Stocks in Workspace</div>
+    <div class="val-sidebar-stocks" id="val-sidebar-stocks">
+      <div class="val-sidebar-empty">No stocks yet.<br/>Add a ticker above.</div>
+    </div>
+  </div>
+
+  <div class="val-sidebar-footer">
+    <button class="btn btn-ghost btn-sm" onclick="valConvertCurrentWs()" id="val-convert-btn"
+            title="Create a portfolio from this workspace's stocks" style="width:100%;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      Convert to Portfolio
     </button>
   </div>
-</div>
 
-<!-- ══ MAIN AREA + SIDEBAR ════════════════════════════════════════════════ -->
-<div class="val-workspace">
+</aside>
 
-  <!-- ── MAIN SCROLLABLE AREA ──────────────────────────────────────── -->
-  <div class="val-body" id="val-stocks-container">
-
-    <!-- Empty state -->
-    <div id="val-empty-state" style="text-align:center;padding:100px 20px;color:var(--muted);">
-      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"
-           style="display:block;margin:0 auto 18px;opacity:.18;">
-        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-      </svg>
-      <div style="font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;">Equity Valuation</div>
-      <div style="font-size:13px;max-width:420px;margin:0 auto;line-height:1.8;color:var(--muted);">
-        Enter a ticker symbol above and click <strong style="color:var(--text);">Add</strong>
-        to fetch financials and run 9 valuation models across 4 categories.
-        You can analyse multiple stocks in parallel using separate tabs.
-      </div>
-    </div>
-
-  </div><!-- /val-body -->
-
-  <!-- ── LISTS SIDEBAR ─────────────────────────────────────────────── -->
-  <div id="val-lists-sidebar">
-    <div class="val-lists-header">
-      <span class="val-lists-title">Lists</span>
-      <button class="val-lists-new-btn" onclick="valNewList()" title="Create new list">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        New
-      </button>
-    </div>
-    <div id="val-lists-container">
-      <div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one.</div>
+<!-- ══ MAIN BODY ═══════════════════════════════════════════════════════ -->
+<div class="val-body" id="val-stocks-container">
+  <div id="val-empty-state" style="text-align:center;padding:100px 20px;color:var(--muted);">
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"
+         style="display:block;margin:0 auto 18px;opacity:.18;">
+      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+    </svg>
+    <div style="font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;">Equity Valuation Workspace</div>
+    <div style="font-size:13px;max-width:440px;margin:0 auto;line-height:1.8;color:var(--muted);">
+      Add a ticker from the sidebar to run 9 valuation models across 4 categories.
+      Each workspace is independent — inputs and stocks are saved automatically.
     </div>
   </div>
-
-</div><!-- /val-workspace -->
-
-<!-- ── ADD-TO-LIST DROPDOWN (floating) ──────────────────────────────── -->
-<div id="val-atl-dropdown" class="val-atl-dropdown" style="display:none;">
-  <div class="val-atl-title">Save to list</div>
-  <div id="val-atl-list"></div>
-  <div class="val-atl-divider"></div>
-  <button class="val-atl-new" onclick="valNewListAndAdd()">
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-    New list
-  </button>
 </div>
 
 <!-- ── MODEL SETTINGS PANEL (floating) ──────────────────────────────── -->
