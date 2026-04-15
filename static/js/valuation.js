@@ -118,7 +118,7 @@ function _renderStockPanel(ticker, d) {
 
   // Initial calc + static historical charts
   _recalcTicker(ticker);
-  _renderModelCharts(ticker, data);
+  _renderModelCharts(ticker, d);
 }
 
 function _stockHeaderHTML(d) {
