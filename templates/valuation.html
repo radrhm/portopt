@@ -8,6 +8,12 @@
 <link rel="stylesheet" href="/static/css/app.css"/>
 <link rel="stylesheet" href="/static/css/valuation.css"/>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<!-- Vercel Analytics -->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments);};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<!-- Vercel Speed Insights -->
+<script>window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments);};</script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
 <body>
 <div class="val-app">
@@ -45,24 +51,57 @@
   </div>
 </div>
 
-<!-- ══ MAIN SCROLLABLE AREA ══════════════════════════════════════════════ -->
-<div class="val-body" id="val-stocks-container">
+<!-- ══ SIDEBAR + MAIN AREA ═══════════════════════════════════════════════ -->
+<div class="val-workspace">
 
-  <!-- Empty state -->
-  <div id="val-empty-state" style="text-align:center;padding:100px 20px;color:var(--muted);">
-    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"
-         style="display:block;margin:0 auto 18px;opacity:.18;">
-      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-    </svg>
-    <div style="font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;">Equity Valuation</div>
-    <div style="font-size:13px;max-width:420px;margin:0 auto;line-height:1.8;color:var(--muted);">
-      Enter a ticker symbol above and click <strong style="color:var(--text);">Add</strong>
-      to fetch financials and run 9 valuation models across 4 categories.
-      You can analyse multiple stocks in parallel using separate tabs.
+  <!-- ── LISTS SIDEBAR ─────────────────────────────────────────────── -->
+  <div id="val-lists-sidebar">
+    <div class="val-lists-header">
+      <span class="val-lists-title">Lists</span>
+      <button class="val-lists-new-btn" onclick="valNewList()" title="Create new list">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        New
+      </button>
+    </div>
+    <div id="val-lists-container">
+      <div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one.</div>
     </div>
   </div>
 
-</div><!-- /val-body -->
+  <!-- ── MAIN SCROLLABLE AREA ──────────────────────────────────────── -->
+  <div class="val-body" id="val-stocks-container">
+
+    <!-- Empty state -->
+    <div id="val-empty-state" style="text-align:center;padding:100px 20px;color:var(--muted);">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"
+           style="display:block;margin:0 auto 18px;opacity:.18;">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <div style="font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;">Equity Valuation</div>
+      <div style="font-size:13px;max-width:420px;margin:0 auto;line-height:1.8;color:var(--muted);">
+        Enter a ticker symbol above and click <strong style="color:var(--text);">Add</strong>
+        to fetch financials and run 9 valuation models across 4 categories.
+        You can analyse multiple stocks in parallel using separate tabs.
+      </div>
+    </div>
+
+  </div><!-- /val-body -->
+
+</div><!-- /val-workspace -->
+
+<!-- ── ADD-TO-LIST DROPDOWN (floating) ──────────────────────────────── -->
+<div id="val-atl-dropdown" class="val-atl-dropdown" style="display:none;">
+  <div class="val-atl-title">Save to list</div>
+  <div id="val-atl-list"></div>
+  <div class="val-atl-divider"></div>
+  <button class="val-atl-new" onclick="valNewListAndAdd()">
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+    New list
+  </button>
+</div>
+
+<!-- ── TOAST NOTIFICATION ────────────────────────────────────────────── -->
+<div id="val-toast" class="val-toast" style="display:none;"></div>
 
 </div><!-- /val-app -->
 

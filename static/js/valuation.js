@@ -8,6 +8,10 @@
 const _vStocks = {};   // { AAPL: { data: {...}, id: 'vs-AAPL' }, ... }
 let   _vActive = null; // currently shown ticker key
 
+// ── Lists state ───────────────────────────────────────────────────────────────
+let _vLists    = [];   // [{id, name, tickers:[{ticker,name,price}]}]
+let _vAtlTicker = null; // ticker for which the Add-to-List dropdown is open
+
 // ── Add stock ─────────────────────────────────────────────────────────────────
 
 async function valAddStock() {
@@ -140,9 +144,15 @@ function _stockHeaderHTML(d) {
         ${d.dividend_annual ? `<span class="val-chip green">Div $${d.dividend_annual} (${d.dividend_yield.toFixed(1)}%)</span>` : '<span class="val-chip">No Dividend</span>'}
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0;">
-      <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
+    <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+      <div>
+        <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
+      </div>
+      <button class="val-save-list-btn" onclick="valShowAddToList('${d.ticker}')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Save to List ▾
+      </button>
     </div>
   </div>`;
 }
@@ -763,3 +773,309 @@ function _setUD(id, intrinsic, price) {
   const cur = Object.values(_vStocks).find(s=>s.data)?.data?.currency || 'USD';
   el.innerHTML = `${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% ${up?'upside':'downside'} &nbsp;·&nbsp; Intrinsic ${_fp(intrinsic, cur)} vs market ${_fp(price, cur)}`;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LISTS MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Init: load lists from server on page load ─────────────────────────────────
+async function valListsInit() {
+  try {
+    const res = await fetch('/api/valuation/lists');
+    if (res.ok) _vLists = await res.json();
+  } catch (_) {}
+  _renderLists();
+}
+
+// ── Render sidebar ────────────────────────────────────────────────────────────
+function _renderLists() {
+  const container = document.getElementById('val-lists-container');
+  if (!container) return;
+
+  if (!_vLists.length) {
+    container.innerHTML = '<div class="val-lists-empty">No lists yet.<br/>Click <strong>New</strong> to create one.</div>';
+    return;
+  }
+
+  container.innerHTML = _vLists.map(lst => {
+    const tickers = lst.tickers || [];
+    const tickerRows = tickers.length
+      ? tickers.map(t => `
+          <div class="val-list-ticker-row" onclick="valSwitchOrLoadTicker('${t.ticker}')">
+            <span class="val-list-ticker-sym">${t.ticker}</span>
+            <span class="val-list-ticker-price">${t.price ? _fp(t.price, 'USD') : ''}</span>
+            <button class="val-list-ticker-del" title="Remove from list"
+              onclick="event.stopPropagation();valRemoveFromList(${lst.id},'${t.ticker}')">×</button>
+          </div>`).join('')
+      : '<div class="val-list-tickers-empty">No stocks yet</div>';
+
+    const convertBtn = tickers.length
+      ? `<button class="val-list-btn convert" title="Convert to portfolio"
+           onclick="event.stopPropagation();valConvertList(${lst.id})">
+           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+         </button>`
+      : '';
+
+    return `
+    <div class="val-list-item" id="vlist-${lst.id}">
+      <div class="val-list-row" id="vlist-row-${lst.id}"
+           onclick="_toggleList(${lst.id})"
+           ondblclick="event.stopPropagation();_startRenameList(${lst.id})">
+        <span class="val-list-chevron">›</span>
+        <span class="val-list-name" id="vlist-name-${lst.id}">${_escHtml(lst.name)}</span>
+        <span class="val-list-count">${tickers.length}</span>
+        <div class="val-list-actions">
+          ${convertBtn}
+          <button class="val-list-btn del" title="Delete list"
+            onclick="event.stopPropagation();_valDeleteList(${lst.id})">×</button>
+        </div>
+      </div>
+      <div class="val-list-tickers" id="vlist-tickers-${lst.id}">
+        ${tickerRows}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Toggle expand/collapse ────────────────────────────────────────────────────
+function _toggleList(id) {
+  const row     = document.getElementById(`vlist-row-${id}`);
+  const tickers = document.getElementById(`vlist-tickers-${id}`);
+  if (!row || !tickers) return;
+  const open = tickers.classList.toggle('open');
+  row.classList.toggle('expanded', open);
+}
+
+// ── Inline rename ─────────────────────────────────────────────────────────────
+function _startRenameList(id) {
+  const nameEl = document.getElementById(`vlist-name-${id}`);
+  if (!nameEl) return;
+  const current = nameEl.textContent;
+  const input   = document.createElement('input');
+  input.className = 'val-list-name-input';
+  input.value     = current;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const newName = input.value.trim() || current;
+    _valRenameList(id, newName);
+  };
+  input.addEventListener('blur',  commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { input.blur(); }
+    if (e.key === 'Escape') { input.value = current; input.blur(); }
+  });
+}
+
+// ── CRUD wrappers ─────────────────────────────────────────────────────────────
+
+async function valNewList() {
+  try {
+    const res  = await fetch('/api/valuation/lists', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name: 'New List'})
+    });
+    const lst = await res.json();
+    _vLists.unshift(lst);
+    _renderLists();
+    // Auto-expand and start rename
+    setTimeout(() => {
+      _toggleList(lst.id);
+      _startRenameList(lst.id);
+    }, 50);
+  } catch (_) {
+    _valToast('Failed to create list.');
+  }
+}
+
+async function _valRenameList(id, name) {
+  const lst = _vLists.find(l => l.id === id);
+  if (!lst) return;
+  lst.name = name;
+  _renderLists();
+  try {
+    await fetch(`/api/valuation/lists/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name})
+    });
+  } catch (_) {}
+}
+
+async function _valDeleteList(id) {
+  _vLists = _vLists.filter(l => l.id !== id);
+  _renderLists();
+  try {
+    await fetch(`/api/valuation/lists/${id}`, {method: 'DELETE'});
+  } catch (_) {}
+}
+
+async function valAddToList(listId, ticker) {
+  const lst    = _vLists.find(l => l.id === listId);
+  const stock  = _vStocks[ticker];
+  if (!lst || !stock?.data) return;
+
+  // Toggle: if already in list, remove it
+  const existing = lst.tickers.findIndex(t => t.ticker === ticker);
+  if (existing >= 0) {
+    lst.tickers.splice(existing, 1);
+  } else {
+    lst.tickers.push({
+      ticker,
+      name:  stock.data.name  || ticker,
+      price: stock.data.current_price || 0,
+    });
+  }
+  _renderLists();
+  // Re-render dropdown to reflect new checked state
+  _renderAtlDropdown(ticker);
+
+  try {
+    await fetch(`/api/valuation/lists/${listId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tickers: lst.tickers})
+    });
+  } catch (_) {}
+}
+
+async function valRemoveFromList(listId, ticker) {
+  const lst = _vLists.find(l => l.id === listId);
+  if (!lst) return;
+  lst.tickers = lst.tickers.filter(t => t.ticker !== ticker);
+  _renderLists();
+  try {
+    await fetch(`/api/valuation/lists/${listId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({tickers: lst.tickers})
+    });
+  } catch (_) {}
+}
+
+async function valConvertList(id) {
+  const lst = _vLists.find(l => l.id === id);
+  if (!lst) return;
+  if (!lst.tickers.length) {
+    _valToast('Add stocks to the list first.');
+    return;
+  }
+  try {
+    const res  = await fetch(`/api/valuation/lists/${id}/to-portfolio`, {method: 'POST'});
+    const data = await res.json();
+    if (data.portfolio_id) {
+      _valToast(
+        `"${lst.name}" saved as portfolio — `,
+        'Open Portfolio Optimizer',
+        '/'
+      );
+    }
+  } catch (_) {
+    _valToast('Conversion failed.');
+  }
+}
+
+// ── Create new list and immediately add current ticker ────────────────────────
+async function valNewListAndAdd() {
+  const ticker = _vAtlTicker;
+  _hideAtlDropdown();
+  try {
+    const res  = await fetch('/api/valuation/lists', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name: ticker ? `${ticker} list` : 'New List'})
+    });
+    const lst = await res.json();
+    _vLists.unshift(lst);
+    if (ticker) await valAddToList(lst.id, ticker);
+    else _renderLists();
+    // Expand new list
+    setTimeout(() => _toggleList(lst.id), 80);
+  } catch (_) {
+    _valToast('Failed to create list.');
+  }
+}
+
+// ── Click a ticker in the sidebar: switch to its tab or load it ───────────────
+function valSwitchOrLoadTicker(ticker) {
+  if (_vStocks[ticker]) {
+    valSwitchTab(ticker);
+  } else {
+    document.getElementById('val-ticker-input').value = ticker;
+    valAddStock();
+  }
+}
+
+// ── Add-to-List dropdown ──────────────────────────────────────────────────────
+function valShowAddToList(ticker) {
+  _vAtlTicker = ticker;
+  const btn = event.currentTarget;
+  _renderAtlDropdown(ticker);
+  const dd  = document.getElementById('val-atl-dropdown');
+  dd.style.display = 'block';
+
+  // Position below the button
+  const rect = btn.getBoundingClientRect();
+  const ddW  = 200;
+  let   left = rect.left;
+  if (left + ddW > window.innerWidth - 8) left = window.innerWidth - ddW - 8;
+  dd.style.left = `${left}px`;
+  dd.style.top  = `${rect.bottom + 4}px`;
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', _atlOutsideClick, {once: true, capture: true});
+  }, 0);
+}
+
+function _renderAtlDropdown(ticker) {
+  const listEl = document.getElementById('val-atl-list');
+  if (!listEl) return;
+  if (!_vLists.length) {
+    listEl.innerHTML = '<div class="val-atl-no-lists">No lists yet</div>';
+    return;
+  }
+  listEl.innerHTML = _vLists.map(lst => {
+    const inList = (lst.tickers || []).some(t => t.ticker === ticker);
+    return `
+    <div class="val-atl-item ${inList ? 'checked' : ''}"
+         onclick="valAddToList(${lst.id},'${ticker}')">
+      <span class="val-atl-check">${inList ? '✓' : ''}</span>
+      <span>${_escHtml(lst.name)}</span>
+    </div>`;
+  }).join('');
+}
+
+function _atlOutsideClick(e) {
+  const dd = document.getElementById('val-atl-dropdown');
+  if (dd && !dd.contains(e.target)) _hideAtlDropdown();
+  else document.addEventListener('click', _atlOutsideClick, {once: true, capture: true});
+}
+
+function _hideAtlDropdown() {
+  const dd = document.getElementById('val-atl-dropdown');
+  if (dd) dd.style.display = 'none';
+  _vAtlTicker = null;
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function _valToast(msg, linkText, linkHref) {
+  const el = document.getElementById('val-toast');
+  if (!el) return;
+  el.innerHTML = msg + (linkText ? `<a href="${linkHref}">${linkText}</a>` : '');
+  el.style.display = 'flex';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ── Escape HTML helper ────────────────────────────────────────────────────────
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Bootstrap on load ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', valListsInit);

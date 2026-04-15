@@ -2,6 +2,7 @@
 
 .val-app {
   display: grid;
+  grid-template-columns: 1fr;
   grid-template-rows: auto auto 1fr;
   height: 100vh;
   overflow: hidden;
@@ -21,6 +22,7 @@
   border-bottom: 1px solid var(--border);
   min-height: 40px;
   overflow: hidden;
+  grid-column: 1 / -1;
 }
 
 .val-tab {
@@ -82,6 +84,228 @@
 }
 .val-search-inline input:focus { border-color: var(--accent); width: 200px; }
 
+/* ── WORKSPACE (sidebar + body) ─────────────────────────────── */
+.val-workspace {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── LISTS SIDEBAR ───────────────────────────────────────────── */
+#val-lists-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: #080f1e;
+  overflow: hidden;
+}
+
+.val-lists-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.val-lists-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.val-lists-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 7px;
+  transition: all .15s;
+}
+.val-lists-new-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+#val-lists-container {
+  overflow-y: auto;
+  flex: 1;
+  padding: 6px 0;
+}
+
+.val-lists-empty {
+  padding: 20px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ── LIST ITEM ───────────────────────────────────────────────── */
+.val-list-item {
+  margin: 0;
+}
+
+.val-list-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px 6px 12px;
+  cursor: pointer;
+  transition: background .1s;
+  min-height: 30px;
+}
+.val-list-row:hover { background: rgba(255,255,255,.04); }
+.val-list-row.expanded { background: rgba(99,102,241,.06); }
+
+.val-list-chevron {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform .15s;
+  line-height: 1;
+  font-size: 10px;
+  width: 10px;
+}
+.val-list-row.expanded .val-list-chevron { transform: rotate(90deg); }
+
+.val-list-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.val-list-name-input {
+  flex: 1;
+  background: #0a1020;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+}
+
+.val-list-count {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255,255,255,.07);
+  border-radius: 8px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+.val-list-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.val-list-row:hover .val-list-actions { opacity: 1; }
+
+.val-list-btn {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  padding: 0;
+  transition: all .1s;
+}
+.val-list-btn:hover { background: rgba(255,255,255,.08); color: var(--text); }
+.val-list-btn.convert:hover { color: var(--accent2); }
+.val-list-btn.del:hover { color: var(--red); }
+
+/* ── TICKER SUB-LIST ─────────────────────────────────────────── */
+.val-list-tickers {
+  display: none;
+  padding: 2px 0 4px 22px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.val-list-tickers.open { display: block; }
+
+.val-list-ticker-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 0;
+  font-size: 11px;
+  color: var(--muted2);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background .1s;
+}
+.val-list-ticker-row:hover { background: rgba(255,255,255,.04); color: var(--text); }
+
+.val-list-ticker-sym {
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--text);
+  flex: 1;
+}
+.val-list-ticker-price {
+  font-size: 10px;
+  color: var(--green);
+}
+.val-list-ticker-del {
+  width: 14px; height: 14px; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center;
+  justify-content: center; font-size: 13px; padding: 0; opacity: 0;
+  transition: opacity .1s; flex-shrink: 0; border-radius: 2px;
+}
+.val-list-ticker-row:hover .val-list-ticker-del { opacity: 1; }
+.val-list-ticker-del:hover { color: var(--red); }
+
+.val-list-tickers-empty {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 4px 0 2px;
+  font-style: italic;
+}
+
+/* ── CONVERT TOOLTIP / CONFIRM ───────────────────────────────── */
+.val-list-convert-confirm {
+  padding: 8px 12px 8px 22px;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(99,102,241,.07);
+  border-top: 1px solid rgba(99,102,241,.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.val-list-convert-btn {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent2);
+  background: transparent;
+  border: 1px solid var(--accent2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.val-list-convert-btn:hover { background: var(--accent2); color: #fff; }
+
 /* ── SCROLLABLE BODY ─────────────────────────────────────────── */
 .val-body {
   overflow-y: auto;
@@ -118,6 +342,108 @@
 }
 .val-chip.green { color: var(--green); background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.2); }
 .val-chip.red   { color: var(--red);   background: rgba(239,68,68,.1);  border-color: rgba(239,68,68,.2);  }
+
+/* ── SAVE TO LIST BUTTON (in stock header) ───────────────────── */
+.val-save-list-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 10px;
+  transition: all .15s;
+  white-space: nowrap;
+  margin-left: auto;
+}
+.val-save-list-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* ── ADD-TO-LIST DROPDOWN ────────────────────────────────────── */
+.val-atl-dropdown {
+  position: fixed;
+  z-index: 9999;
+  background: #0d1626;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  min-width: 180px;
+  padding: 6px 0;
+}
+.val-atl-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 12px 6px;
+}
+.val-atl-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .1s;
+}
+.val-atl-item:hover { background: rgba(255,255,255,.06); }
+.val-atl-item.checked .val-atl-check { color: var(--green); }
+.val-atl-item:not(.checked) .val-atl-check { color: transparent; }
+.val-atl-check { width: 12px; flex-shrink: 0; font-size: 11px; }
+.val-atl-divider { border-top: 1px solid var(--border); margin: 4px 0; }
+.val-atl-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  color: var(--muted2);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color .1s;
+  text-align: left;
+}
+.val-atl-new:hover { color: var(--accent2); }
+.val-atl-no-lists {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 12px 6px;
+  font-style: italic;
+}
+
+/* ── TOAST ───────────────────────────────────────────────────── */
+.val-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  background: #1a2236;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  animation: toastIn .2s ease;
+}
+.val-toast a { color: var(--accent2); text-decoration: none; font-weight: 700; }
+.val-toast a:hover { text-decoration: underline; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 
 /* ── COMPARE CHART ───────────────────────────────────────────── */
 .val-compare-card {

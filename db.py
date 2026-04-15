@@ -47,6 +47,13 @@ def init_db() -> None:
             results        TEXT,
             is_custom      INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS valuation_lists (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL DEFAULT 'New List',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            tickers    TEXT NOT NULL DEFAULT '[]'
+        );
         """)
         conn.commit()
         conn.close()
@@ -119,6 +126,75 @@ def save_portfolio(data: dict) -> int:
 def delete_portfolio(pid: int) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM portfolios WHERE id=?", (pid,))
+    conn.commit()
+    conn.close()
+
+
+# ── VALUATION LISTS CRUD ───────────────────────────────────────────────────────
+
+def list_val_lists() -> list[dict]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, name, created_at, updated_at, tickers FROM valuation_lists ORDER BY updated_at DESC"
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["tickers"] = json.loads(d["tickers"]) if d["tickers"] else []
+        except (json.JSONDecodeError, TypeError):
+            d["tickers"] = []
+        result.append(d)
+    return result
+
+
+def get_val_list(lid: int) -> dict | None:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM valuation_lists WHERE id=?", (lid,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    try:
+        d["tickers"] = json.loads(d["tickers"]) if d["tickers"] else []
+    except (json.JSONDecodeError, TypeError):
+        d["tickers"] = []
+    return d
+
+
+def save_val_list(data: dict) -> int:
+    """Insert or update. If data has 'id', update; otherwise insert. Returns id."""
+    conn = get_conn()
+    now = _utcnow()
+    lid = data.get("id")
+
+    fields = {
+        "name":       data.get("name", "New List"),
+        "updated_at": now,
+        "tickers":    json.dumps(data.get("tickers", [])),
+    }
+
+    if lid:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(f"UPDATE valuation_lists SET {sets} WHERE id=?", (*fields.values(), lid))
+    else:
+        fields["created_at"] = now
+        cols = ", ".join(fields.keys())
+        qs = ", ".join("?" * len(fields))
+        cur = conn.execute(
+            f"INSERT INTO valuation_lists ({cols}) VALUES ({qs})", tuple(fields.values())
+        )
+        lid = cur.lastrowid
+
+    conn.commit()
+    conn.close()
+    return lid
+
+
+def delete_val_list(lid: int) -> None:
+    conn = get_conn()
+    conn.execute("DELETE FROM valuation_lists WHERE id=?", (lid,))
     conn.commit()
     conn.close()
 
