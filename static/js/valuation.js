@@ -116,8 +116,9 @@ function _renderStockPanel(ticker, d) {
     inp.addEventListener('input', () => _recalcTicker(ticker));
   });
 
-  // Initial calc
+  // Initial calc + static historical charts
   _recalcTicker(ticker);
+  _renderModelCharts(ticker, data);
 }
 
 function _stockHeaderHTML(d) {
@@ -268,6 +269,7 @@ function _dcfCardHTML(tk, d) {
 
   const body = `
     ${fcfHistory}
+    <div id="mchart-${tk}-dcf" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-dcf-fcf`,  'FCF — Latest Year ($M)', d.fcf_total_m,   'Total free cash flow, most recent year', '1')}
       ${_inp(`${tk}-dcf-mktcap`, 'Market Cap ($M)', d.market_cap_m, 'Current market capitalisation in millions', '10')}
@@ -287,6 +289,7 @@ function _dcfCardHTML(tk, d) {
 // 2. EPV ───────────────────────────────────────────────────────────────────────
 function _epvCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-epv" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-epv-ebit`,  'EBIT ($M)', d.ebit_m, 'Earnings before interest & tax', '1')}
       ${_inp(`${tk}-epv-tax`,   'Tax Rate (%)', d.tax_rate_pct, 'Effective corporate tax rate', '0.5', '0', '50')}
@@ -306,6 +309,7 @@ function _ddmCardHTML(tk, d) {
     : '';
   const body = `
     ${noDivNote}
+    <div id="mchart-${tk}-ddm" class="val-mchart"></div>
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-ddm-div`, 'Annual Dividend / Share ($)', d.dividend_annual || 0, 'Last declared annual dividend per share', '0.01', '0')}
       ${_inp(`${tk}-ddm-g`,   'Dividend Growth Rate (%)', Math.min(d.earnings_growth_pct * 0.4, 8).toFixed(1), 'Long-term expected annual dividend growth', '0.5', '0', '20')}
@@ -320,6 +324,7 @@ function _ddmCardHTML(tk, d) {
 function _peCardHTML(tk, d) {
   const fwdPe = Math.max((d.sector_pe - 2), 10).toFixed(1);
   const body = `
+    <div id="mchart-${tk}-pe" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-pe-epsttm`, 'EPS TTM ($)', d.eps_ttm,    'Trailing twelve months earnings per share', '0.01')}
       ${_inp(`${tk}-pe-epsfwd`, 'EPS Forward ($)', d.eps_forward, 'Next twelve months consensus estimate', '0.01')}
@@ -339,6 +344,7 @@ function _peCardHTML(tk, d) {
 // 5. EV/EBITDA ─────────────────────────────────────────────────────────────────
 function _evEbitdaCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-evda" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-evda-ebitda`, 'EBITDA ($M)', d.ebitda_m, 'Earnings before interest, tax, D&A', '10')}
       ${_inp(`${tk}-evda-mult`,   'Target EV/EBITDA ×', d.sector_ev, 'Sector fair-value multiple', '0.5', '1')}
@@ -354,6 +360,7 @@ function _evEbitdaCardHTML(tk, d) {
 function _evEbitCardHTML(tk, d) {
   const ebitMult = d.sector_ev * 0.8;
   const body = `
+    <div id="mchart-${tk}-eveb" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-eveb-ebit`,   'EBIT ($M)', d.ebit_m, 'Operating profit (before interest & tax)', '1')}
       ${_inp(`${tk}-eveb-mult`,   'Target EV/EBIT ×', ebitMult.toFixed(1), 'Sector fair-value EV/EBIT multiple', '0.5', '1')}
@@ -368,6 +375,7 @@ function _evEbitCardHTML(tk, d) {
 // 7. P/S ───────────────────────────────────────────────────────────────────────
 function _psCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-ps" class="val-mchart"></div>
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-ps-rev`,    'Revenue ($M)', d.revenue_m, 'Last twelve months total revenue', '10')}
       ${_inp(`${tk}-ps-mult`,   'Target P/S ×', d.sector_ps, 'Price-to-sales multiple for sector', '0.1', '0.1')}
@@ -381,6 +389,7 @@ function _psCardHTML(tk, d) {
 // 8. PEG ───────────────────────────────────────────────────────────────────────
 function _pegCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-peg" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-peg-eps`,    'EPS ($)', d.eps_ttm, 'Trailing twelve months EPS', '0.01')}
       ${_inp(`${tk}-peg-g`,      'EPS Growth Rate (%)', d.earnings_growth_pct, '5-year expected annual earnings growth', '0.5', '0.1')}
@@ -394,6 +403,7 @@ function _pegCardHTML(tk, d) {
 // 9. Graham Number ─────────────────────────────────────────────────────────────
 function _grahamCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-graham" class="val-mchart"></div>
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-gr-eps`,  'EPS TTM ($)', d.eps_ttm, 'Must be positive', '0.01')}
       ${_inp(`${tk}-gr-bvps`, 'Book Value / Share ($)', d.book_value_ps, 'Total equity ÷ shares outstanding', '0.01')}
@@ -407,6 +417,7 @@ function _grahamCardHTML(tk, d) {
 // 10. NCAV ─────────────────────────────────────────────────────────────────────
 function _ncavCardHTML(tk, d) {
   const body = `
+    <div id="mchart-${tk}-ncav" class="val-mchart"></div>
     <div class="val-inputs-grid">
       ${_inp(`${tk}-ncav-ca`,    'Current Assets ($M)', d.current_assets_m, 'Cash, receivables, inventory — most liquid assets', '10')}
       ${_inp(`${tk}-ncav-tl`,    'Total Liabilities ($M)', d.total_liab_m, 'All obligations (current + long-term)', '10')}
@@ -772,6 +783,211 @@ function _setUD(id, intrinsic, price) {
   // derive currency from any loaded stock (all share same currency assumption)
   const cur = Object.values(_vStocks).find(s=>s.data)?.data?.currency || 'USD';
   el.innerHTML = `${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% ${up?'upside':'downside'} &nbsp;·&nbsp; Intrinsic ${_fp(intrinsic, cur)} vs market ${_fp(price, cur)}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODEL MINI CHARTS  (historical valuation multiples — TIKR-style)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Shared compact Plotly layout
+function _mLayout(yTitle, showLegend) {
+  return {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  'transparent',
+    font:  {color: '#64748b', size: 9},
+    margin: {t: 8, r: 10, b: 30, l: 46},
+    xaxis: {
+      gridcolor: '#1a2236', zerolinewidth: 0, fixedrange: true,
+      tickfont: {size: 9, color: '#64748b'}, dtick: 1,
+    },
+    yaxis: {
+      gridcolor: '#1a2236', zerolinewidth: 0, fixedrange: true,
+      tickfont: {size: 9, color: '#64748b'},
+      title: {text: yTitle, font: {size: 8, color: '#475569'}},
+    },
+    showlegend: !!showLegend,
+    legend: {orientation: 'h', y: -0.32, x: 0.5, xanchor: 'center',
+             font: {size: 8}, bgcolor: 'transparent'},
+  };
+}
+
+const _mConf = {displayModeBar: false, responsive: true};
+
+function _meanLine(pts, valKey, color) {
+  if (pts.length < 2) return null;
+  const avg = pts.reduce((s, r) => s + r[valKey], 0) / pts.length;
+  const x0 = pts[0].year, x1 = pts[pts.length - 1].year;
+  return {
+    type: 'scatter', mode: 'lines',
+    x: [x0, x1], y: [avg, avg],
+    line: {color: color || '#f59e0b', width: 1.5, dash: 'dot'},
+    name: `Avg ${avg.toFixed(1)}×`,
+    hovertemplate: `Avg: ${avg.toFixed(1)}×<extra></extra>`,
+  };
+}
+
+function _renderModelCharts(tk, d) {
+  // ── DCF: FCF bar chart ────────────────────────────────────────────────
+  const fcf = (d.historical_fcf || []).slice().reverse();
+  if (fcf.length >= 2 && document.getElementById(`mchart-${tk}-dcf`)) {
+    const vals = fcf.map(r => r.fcf_m);
+    Plotly.react(`mchart-${tk}-dcf`, [{
+      type: 'bar', x: fcf.map(r => r.year), y: vals,
+      marker: {
+        color: vals.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)'),
+        line: {width: 0},
+      },
+      hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
+    }], _mLayout('FCF ($M)'), _mConf);
+  }
+
+  // ── EPV: EBIT bar chart ───────────────────────────────────────────────
+  const ebitH = d.ebit_annual || [];
+  if (ebitH.length >= 2 && document.getElementById(`mchart-${tk}-epv`)) {
+    Plotly.react(`mchart-${tk}-epv`, [{
+      type: 'bar', x: ebitH.map(r => r.year), y: ebitH.map(r => r.ebit_m),
+      marker: {color: 'rgba(99,102,241,.7)', line: {width: 0}},
+      hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
+    }], _mLayout('EBIT ($M)'), _mConf);
+  }
+
+  // ── DDM: Dividend history bars ────────────────────────────────────────
+  const divH = d.dividend_history || [];
+  if (divH.length >= 2 && document.getElementById(`mchart-${tk}-ddm`)) {
+    Plotly.react(`mchart-${tk}-ddm`, [{
+      type: 'bar', x: divH.map(r => r.year), y: divH.map(r => r.dividend),
+      marker: {color: 'rgba(245,158,11,.75)', line: {width: 0}},
+      hovertemplate: '%{x}: $%{y:.2f}/share<extra></extra>',
+    }], _mLayout('Div/Share ($)'), _mConf);
+  }
+
+  // ── P/E: historical TTM P/E line + mean ───────────────────────────────
+  const peH = d.pe_history || [];
+  if (peH.length >= 2 && document.getElementById(`mchart-${tk}-pe`)) {
+    const traces = [
+      {
+        type: 'scatter', mode: 'lines+markers',
+        x: peH.map(r => r.year), y: peH.map(r => r.pe),
+        line: {color: '#6366f1', width: 2},
+        marker: {size: 5, color: '#6366f1'},
+        name: 'TTM P/E',
+        hovertemplate: '%{x}: %{y:.1f}×<extra></extra>',
+      },
+    ];
+    const ml = _meanLine(peH, 'pe', '#f59e0b');
+    if (ml) traces.push(ml);
+    Plotly.react(`mchart-${tk}-pe`, traces, _mLayout('P/E (×)', true), _mConf);
+  }
+
+  // ── EV/EBITDA: historical line + mean ────────────────────────────────
+  const evdaH = d.ev_ebitda_history || [];
+  if (evdaH.length >= 2 && document.getElementById(`mchart-${tk}-evda`)) {
+    const traces = [
+      {
+        type: 'scatter', mode: 'lines+markers',
+        x: evdaH.map(r => r.year), y: evdaH.map(r => r.ev_ebitda),
+        line: {color: '#10b981', width: 2},
+        marker: {size: 5, color: '#10b981'},
+        name: 'EV/EBITDA',
+        hovertemplate: '%{x}: %{y:.1f}×<extra></extra>',
+      },
+    ];
+    const ml = _meanLine(evdaH, 'ev_ebitda', '#f59e0b');
+    if (ml) traces.push(ml);
+    Plotly.react(`mchart-${tk}-evda`, traces, _mLayout('EV/EBITDA (×)', true), _mConf);
+  }
+
+  // ── EV/EBIT: EBITDA bars ──────────────────────────────────────────────
+  const ebitdaH = d.ebitda_annual || [];
+  if (ebitdaH.length >= 2 && document.getElementById(`mchart-${tk}-eveb`)) {
+    Plotly.react(`mchart-${tk}-eveb`, [{
+      type: 'bar', x: ebitdaH.map(r => r.year), y: ebitdaH.map(r => r.ebitda_m),
+      marker: {color: 'rgba(16,185,129,.6)', line: {width: 0}},
+      hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
+    }], _mLayout('EBITDA ($M)'), _mConf);
+  }
+
+  // ── P/S: historical P/S line + mean ──────────────────────────────────
+  const psH = d.ps_history || [];
+  if (psH.length >= 2 && document.getElementById(`mchart-${tk}-ps`)) {
+    const traces = [
+      {
+        type: 'scatter', mode: 'lines+markers',
+        x: psH.map(r => r.year), y: psH.map(r => r.ps),
+        line: {color: '#06b6d4', width: 2},
+        marker: {size: 5, color: '#06b6d4'},
+        name: 'P/S',
+        hovertemplate: '%{x}: %{y:.2f}×<extra></extra>',
+      },
+    ];
+    const ml = _meanLine(psH, 'ps', '#f59e0b');
+    if (ml) traces.push(ml);
+    Plotly.react(`mchart-${tk}-ps`, traces, _mLayout('P/S (×)', true), _mConf);
+  }
+
+  // ── PEG: EPS history bars ─────────────────────────────────────────────
+  const epsH = d.eps_history || [];
+  if (epsH.length >= 2 && document.getElementById(`mchart-${tk}-peg`)) {
+    Plotly.react(`mchart-${tk}-peg`, [{
+      type: 'bar', x: epsH.map(r => r.year), y: epsH.map(r => r.eps),
+      marker: {
+        color: epsH.map(r => r.eps >= 0 ? 'rgba(99,102,241,.7)' : 'rgba(239,68,68,.7)'),
+        line: {width: 0},
+      },
+      hovertemplate: '%{x}: $%{y:.2f} EPS<extra></extra>',
+    }], _mLayout('EPS ($)'), _mConf);
+  }
+
+  // ── Graham: EPS + Book Value comparison bars ──────────────────────────
+  if (document.getElementById(`mchart-${tk}-graham`)) {
+    const eps  = d.eps_ttm;
+    const bvps = d.book_value_ps;
+    const price = d.current_price;
+    if (eps > 0 && bvps > 0) {
+      const graham = Math.sqrt(22.5 * eps * bvps);
+      Plotly.react(`mchart-${tk}-graham`, [{
+        type: 'bar',
+        x: ['EPS (TTM)', 'Book Value/Share', 'Graham Value', 'Market Price'],
+        y: [eps, bvps, graham, price],
+        marker: {
+          color: ['rgba(99,102,241,.7)', 'rgba(99,102,241,.7)',
+                  graham >= price ? 'rgba(16,185,129,.8)' : 'rgba(239,68,68,.8)',
+                  'rgba(148,163,184,.5)'],
+          line: {width: 0},
+        },
+        hovertemplate: '%{x}: $%{y:.2f}<extra></extra>',
+      }], {
+        ..._mLayout('$'),
+        xaxis: {..._mLayout('$').xaxis, dtick: undefined, tickangle: -20, tickfont: {size: 8}},
+      }, _mConf);
+    }
+  }
+
+  // ── NCAV: Current assets vs total liabilities waterfall ───────────────
+  if (document.getElementById(`mchart-${tk}-ncav`)) {
+    const ca  = d.current_assets_m;
+    const tl  = d.total_liab_m;
+    const net = ca - tl;
+    if (ca || tl) {
+      Plotly.react(`mchart-${tk}-ncav`, [{
+        type: 'bar',
+        x: ['Current Assets', 'Total Liabilities', 'NCAV'],
+        y: [ca, tl, Math.max(0, net)],
+        marker: {
+          color: [
+            'rgba(16,185,129,.7)',
+            'rgba(239,68,68,.7)',
+            net > 0 ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)',
+          ],
+          line: {width: 0},
+        },
+        hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
+      }], {
+        ..._mLayout('$M'),
+        xaxis: {..._mLayout('$M').xaxis, dtick: undefined, tickangle: -15, tickfont: {size: 8}},
+      }, _mConf);
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

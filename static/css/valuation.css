@@ -84,10 +84,10 @@
 }
 .val-search-inline input:focus { border-color: var(--accent); width: 200px; }
 
-/* ── WORKSPACE (sidebar + body) ─────────────────────────────── */
+/* ── WORKSPACE (body + sidebar) ─────────────────────────────── */
 .val-workspace {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 1fr 220px;
   overflow: hidden;
   min-height: 0;
 }
@@ -96,7 +96,7 @@
 #val-lists-sidebar {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   background: #080f1e;
   overflow: hidden;
 }
@@ -552,6 +552,17 @@
   padding: 5px 10px; flex: 1; min-width: 140px;
 }
 .val-two-label { font-size: 10px; color: var(--muted); flex: 1; }
+
+/* ── MODEL MINI CHART ────────────────────────────────────────── */
+.val-mchart {
+  height: 130px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #060d1a;
+  border: 1px solid rgba(255,255,255,.04);
+}
+.val-mchart:empty { display: none; }
 
 /* ── NOTE ────────────────────────────────────────────────────── */
 .val-note {

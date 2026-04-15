@@ -204,6 +204,123 @@ def fetch_financials(ticker: str) -> dict:
     div_rate  = float(info.get("dividendRate")  or 0)
     div_yield = float(info.get("dividendYield") or 0) * 100
 
+    # ── Historical annual data for model charts ───────────────────
+    pe_history        = []
+    ps_history        = []
+    ev_ebitda_history = []
+    ebit_annual       = []
+    ebitda_annual     = []
+    revenue_annual    = []
+    eps_history       = []
+    dividend_history  = []
+
+    try:
+        import pandas as pd
+        fin_full = t.financials  # annual income statement
+
+        # Weekly price history for ratio computation
+        prices_s = None
+        try:
+            _hist = t.history(period='6y', interval='1wk')
+            if _hist is not None and not _hist.empty:
+                prices_s = _hist['Close']
+        except Exception:
+            pass
+
+        if fin_full is not None and not fin_full.empty:
+            for col in sorted(fin_full.columns, key=lambda c: c):
+                try:
+                    yr = col.year
+                except Exception:
+                    continue
+
+                rev = ebit_v = ebitda_v = net_inc = None
+
+                for lbl in ('Total Revenue', 'Revenue', 'Operating Revenue'):
+                    if lbl in fin_full.index:
+                        v = fin_full.loc[lbl, col]
+                        if not _isnan(v): rev = float(v); break
+
+                for lbl in ('EBIT', 'Operating Income', 'Ebit'):
+                    if lbl in fin_full.index:
+                        v = fin_full.loc[lbl, col]
+                        if not _isnan(v): ebit_v = float(v); break
+
+                for lbl in ('EBITDA', 'Normalized EBITDA'):
+                    if lbl in fin_full.index:
+                        v = fin_full.loc[lbl, col]
+                        if not _isnan(v): ebitda_v = float(v); break
+
+                for lbl in ('Net Income', 'Net Income Common Stockholders'):
+                    if lbl in fin_full.index:
+                        v = fin_full.loc[lbl, col]
+                        if not _isnan(v): net_inc = float(v); break
+
+                if rev:
+                    revenue_annual.append({'year': yr, 'revenue_m': round(rev / 1e6, 1)})
+                if ebit_v is not None:
+                    ebit_annual.append({'year': yr, 'ebit_m': round(ebit_v / 1e6, 1)})
+                if ebitda_v:
+                    ebitda_annual.append({'year': yr, 'ebitda_m': round(ebitda_v / 1e6, 1)})
+
+                eps_yr = round(net_inc / shares, 2) if (net_inc and shares) else None
+                if eps_yr is not None:
+                    eps_history.append({'year': yr, 'eps': eps_yr})
+
+                # Historical price at this fiscal year-end for ratio computation
+                if prices_s is not None and len(prices_s) > 0:
+                    try:
+                        target = pd.Timestamp(col)
+                        idx = prices_s.index.searchsorted(target)
+                        if idx >= len(prices_s):
+                            idx = len(prices_s) - 1
+                        hist_px = float(prices_s.iloc[idx])
+                        if hist_px > 0:
+                            if eps_yr and eps_yr > 0:
+                                pe_history.append({
+                                    'year': yr,
+                                    'pe': round(hist_px / eps_yr, 1)
+                                })
+                            if rev and rev > 0:
+                                hist_mc = hist_px * shares
+                                ps_history.append({
+                                    'year': yr,
+                                    'ps': round(hist_mc / rev, 2)
+                                })
+                            if ebitda_v and ebitda_v > 0:
+                                hist_mc  = hist_px * shares
+                                hist_ev  = hist_mc + (total_debt - cash)
+                                if hist_ev > 0:
+                                    ev_ebitda_history.append({
+                                        'year': yr,
+                                        'ev_ebitda': round(hist_ev / ebitda_v, 1)
+                                    })
+                    except Exception:
+                        pass
+
+        for lst in [revenue_annual, ebit_annual, ebitda_annual, eps_history,
+                    pe_history, ps_history, ev_ebitda_history]:
+            lst.sort(key=lambda x: x['year'])
+
+    except Exception as e:
+        logger.warning("Could not compute annual history: %s", e)
+
+    # Dividend history (annual sum, last 5 years)
+    try:
+        import pandas as pd
+        divs = t.dividends
+        if divs is not None and not divs.empty:
+            annual_d = divs.resample('YE').sum()
+            for dt, amt in annual_d.items():
+                if float(amt) > 0:
+                    dividend_history.append({
+                        'year': dt.year,
+                        'dividend': round(float(amt), 2)
+                    })
+            dividend_history = sorted(dividend_history, key=lambda x: x['year'])[-5:]
+    except Exception as e:
+        logger.warning("Could not parse dividend history: %s", e)
+
     return {
         # Identity
         "ticker":          ticker.upper(),
@@ -267,6 +384,16 @@ def fetch_financials(ticker: str) -> dict:
         # PEG
         "peg_ratio": round(pe_ttm / earnings_growth_pct, 2)
                      if earnings_growth_pct > 0 and pe_ttm > 0 else 0,
+
+        # Historical data for model charts
+        "pe_history":         pe_history,
+        "ps_history":         ps_history,
+        "ev_ebitda_history":  ev_ebitda_history,
+        "ebit_annual":        ebit_annual,
+        "ebitda_annual":      ebitda_annual,
+        "revenue_annual":     revenue_annual,
+        "eps_history":        eps_history,
+        "dividend_history":   dividend_history,
     }
 
 
