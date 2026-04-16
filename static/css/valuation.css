@@ -233,14 +233,91 @@
   padding: 14px 20px;
   margin-bottom: 20px;
 }
-.val-stock-ticker { font-size: 24px; font-weight: 900; color: var(--text); }
-.val-stock-name   { font-size: 12px; color: var(--muted2); margin-top: 3px; }
+/* ── STOCK HEADER (2-column: info left, chart right) ────── */
+.val-stock-header-top {
+  display: flex; gap: 20px; align-items: flex-start;
+}
+.val-stock-info { flex: 1; min-width: 0; }
+.val-stock-chart-col {
+  flex-shrink: 0; width: 320px; display: flex; flex-direction: column; align-items: flex-end;
+}
+.val-price-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.val-price-change { font-size: 12px; font-weight: 600; }
+.val-price-change.up   { color: var(--green); }
+.val-price-change.down { color: var(--red); }
+.val-sparkline { width: 320px; height: 100px; }
+.val-stock-ticker { font-size: 26px; font-weight: 900; color: var(--text); letter-spacing: -.03em; text-transform: uppercase; }
+.val-stock-name   { font-size: 13px; color: var(--muted2); font-weight: 400; }
 .val-stock-price  {
-  font-size: 26px; font-weight: 800; margin-left: auto;
+  font-size: 28px; font-weight: 900; letter-spacing: -.03em;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
 .val-stock-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.val-biz-summary {
+  margin-top: 10px; font-size: 11px; line-height: 1.7; color: var(--muted);
+  font-weight: 400; max-width: 600px;
+}
+
+/* ── AI ANALYSIS SECTION ──────────────────────────────────── */
+.val-ai-section { margin-bottom: 20px; }
+.val-ai-loading {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px; font-size: 12px; color: var(--muted);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--r);
+}
+.val-ai-spinner {
+  width: 16px; height: 16px; border: 2px solid var(--border);
+  border-top-color: var(--accent2); border-radius: 50%;
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+.val-ai-error {
+  padding: 12px 16px; font-size: 11px; color: var(--muted);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--r);
+}
+.val-ai-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.val-ai-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden;
+}
+.val-ai-card-wide { grid-column: 1 / -1; }
+.val-ai-card-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; font-size: 11px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text);
+  background: #0d1626; border-bottom: 1px solid var(--border);
+}
+.val-ai-card-body {
+  padding: 12px 14px; font-size: 12px; line-height: 1.75;
+  color: var(--muted2); font-weight: 400;
+}
+.val-ai-disclaimer {
+  margin-top: 8px; font-size: 9px; color: var(--muted);
+  font-style: italic; text-align: center; opacity: .7;
+}
+
+/* SWOT 2×2 grid */
+.val-swot-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+}
+.val-swot-quad {
+  padding: 10px 14px; font-size: 11px; line-height: 1.7; color: var(--muted2);
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.val-swot-quad:nth-child(2n) { border-right: none; }
+.val-swot-quad:nth-child(n+3) { border-bottom: none; }
+.val-swot-title {
+  font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.val-swot-quad.s .val-swot-title { color: var(--green); }
+.val-swot-quad.w .val-swot-title { color: var(--red); }
+.val-swot-quad.o .val-swot-title { color: var(--accent2); }
+.val-swot-quad.t .val-swot-title { color: var(--gold); }
+.val-swot-quad ul { margin: 0; padding-left: 16px; }
+.val-swot-quad li { margin-bottom: 3px; font-weight: 400; }
 .val-chip {
   font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 3px;
   background: #1a2236; border: 1px solid var(--border); color: var(--muted2);
@@ -288,7 +365,7 @@
 /* ── CATEGORY SECTION ──────────────────────────────────────── */
 .val-category { margin-bottom: 28px; }
 .val-category-title {
-  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  font-size: 10px; font-weight: 800; letter-spacing: .12em;
   text-transform: uppercase; color: var(--muted2);
   padding: 0 2px 8px; border-bottom: 1px solid var(--border);
   margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
@@ -313,9 +390,9 @@
   gap: 12px; padding: 12px 14px;
   background: #0d1626; border-bottom: 1px solid var(--border);
 }
-.val-card-title    { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
-.val-card-subtitle { font-size: 10px; color: var(--muted); line-height: 1.5; max-width: 320px; }
-.val-card-result   { font-size: 20px; font-weight: 800; white-space: nowrap; flex-shrink: 0; color: var(--accent2); }
+.val-card-title    { font-size: 12px; font-weight: 800; color: var(--text); margin-bottom: 2px; letter-spacing: -.01em; }
+.val-card-subtitle { font-size: 10px; color: var(--muted); line-height: 1.5; max-width: 320px; font-weight: 400; }
+.val-card-result   { font-size: 20px; font-weight: 900; letter-spacing: -.02em; white-space: nowrap; flex-shrink: 0; color: var(--accent2); }
 .val-card-result.sml { font-size: 14px; }
 .val-card-result.green { color: var(--green); }
 .val-card-result.red   { color: var(--red); }

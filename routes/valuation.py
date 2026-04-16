@@ -25,6 +25,29 @@ def get_financials():
         return jsonify({"error": f"Failed to fetch data: {str(e)}"}), 500
 
 
+# ── AI BUSINESS ANALYSIS ──────────────────────────────────────────────────────
+
+@valuation_bp.route("/api/valuation/analysis", methods=["POST"])
+def get_analysis():
+    body = request.get_json(silent=True) or {}
+    ticker = (body.get("ticker") or "").strip().upper()
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
+    financials = body.get("financials") or {}
+    if not financials:
+        try:
+            from services.valuation import fetch_financials
+            financials = fetch_financials(ticker)
+        except Exception:
+            pass
+    try:
+        from services.valuation import get_business_analysis
+        data = get_business_analysis(ticker, financials)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── VALUATION LISTS ────────────────────────────────────────────────────────────
 
 @valuation_bp.route("/api/valuation/lists", methods=["GET"])

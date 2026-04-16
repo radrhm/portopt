@@ -203,6 +203,7 @@ def fetch_financials(ticker: str) -> dict:
 
     div_rate  = float(info.get("dividendRate")  or 0)
     div_yield = float(info.get("dividendYield") or 0) * 100
+    business_summary = info.get("longBusinessSummary") or ""
 
     # ── Piotroski F-Score & Altman Z-Score ───────────────────────
     scores = _calc_scores(t, mktcap)
@@ -308,6 +309,19 @@ def fetch_financials(ticker: str) -> dict:
     except Exception as e:
         logger.warning("Could not compute annual history: %s", e)
 
+    # Price sparkline (1 year, weekly)
+    price_history = []
+    try:
+        _ph = t.history(period='1y', interval='1wk')
+        if _ph is not None and not _ph.empty:
+            for dt, row in _ph.iterrows():
+                price_history.append({
+                    'date': dt.strftime('%Y-%m-%d'),
+                    'close': round(float(row['Close']), 2),
+                })
+    except Exception as e:
+        logger.warning("Could not fetch price history: %s", e)
+
     # Dividend history (annual sum, last 5 years)
     try:
         import pandas as pd
@@ -397,6 +411,10 @@ def fetch_financials(ticker: str) -> dict:
         "revenue_annual":     revenue_annual,
         "eps_history":        eps_history,
         "dividend_history":   dividend_history,
+
+        # Business info
+        "business_summary": business_summary,
+        "price_history":    price_history,
 
         # Quality scores
         **scores,
@@ -553,3 +571,81 @@ def _fmt_large(n: float) -> str:
     if n >= 1e6:
         return f"${n/1e6:.1f}M"
     return f"${n:,.0f}"
+
+
+# ── Gemini AI Business Analysis ──────────────────────────────────────────────
+
+def get_business_analysis(ticker: str, financials: dict) -> dict:
+    """Call Gemini to generate structured business analysis for a company."""
+    import os, json, traceback, concurrent.futures
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return {"error": "No GEMINI_API_KEY configured"}
+
+    prompt = f"""You are a senior equity research analyst. Produce a structured business analysis for {ticker} ({financials.get('name', ticker)}).
+
+Company context:
+- Sector: {financials.get('sector', 'N/A')}
+- Industry: {financials.get('industry', 'N/A')}
+- Market Cap: {financials.get('market_cap_fmt', 'N/A')}
+- Revenue: ${financials.get('revenue_m', 0):.0f}M
+- EBITDA: ${financials.get('ebitda_m', 0):.0f}M
+- EBIT: ${financials.get('ebit_m', 0):.0f}M
+- P/E TTM: {financials.get('pe_ttm', 'N/A')}
+- EV/EBITDA: {financials.get('ev_ebitda_current', 'N/A')}
+- Beta: {financials.get('beta', 'N/A')}
+- Business Summary: {(financials.get('business_summary', '') or '')[:500]}
+
+Return ONLY valid JSON with these exact keys:
+{{
+  "business_model": "80-120 words: what does this company do, how does it make money, what is the core value proposition",
+  "revenue_segments": "80-120 words: break down key revenue streams / business segments, approximate % contribution of each, and which are growing fastest",
+  "swot": {{
+    "strengths": ["3-4 bullet points, each 10-20 words"],
+    "weaknesses": ["3-4 bullet points"],
+    "opportunities": ["3-4 bullet points"],
+    "threats": ["3-4 bullet points"]
+  }},
+  "moat": "60-80 words: assess the company's economic moat (brand, network effects, cost advantage, switching costs, intangible assets). Rate as: None, Narrow, or Wide",
+  "moat_rating": "None|Narrow|Wide",
+  "governance": "60-80 words: assess corporate governance quality — management tenure, insider ownership, board independence, capital allocation track record, any red flags. Rate as: Weak, Average, or Strong",
+  "governance_rating": "Weak|Average|Strong"
+}}
+
+Be specific to this company. Reference actual facts. Return only valid JSON."""
+
+    def _call():
+        import requests as _req
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.0-flash:generateContent?key={api_key}"
+        )
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.3},
+        }
+        try:
+            r = _req.post(url, json=body, timeout=18)
+            r.raise_for_status()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if text.startswith("```"):
+                text = text.split("```", 2)[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.rsplit("```", 1)[0]
+            return json.loads(text.strip())
+        except Exception:
+            logger.warning("Gemini business analysis failed: %s", traceback.format_exc())
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(_call)
+        try:
+            result = future.result(timeout=20)
+            if result:
+                return result
+        except concurrent.futures.TimeoutError:
+            logger.warning("Gemini business analysis timed out.")
+
+    return {"error": "AI analysis unavailable"}

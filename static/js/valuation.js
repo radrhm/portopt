@@ -373,6 +373,12 @@ function _renderStockPanel(ticker, d) {
 
   panel.innerHTML = `
     ${_stockHeaderHTML(d)}
+    <div id="val-ai-${ticker}" class="val-ai-section">
+      <div class="val-ai-loading">
+        <div class="val-ai-spinner"></div>
+        <span>Generating AI business analysis...</span>
+      </div>
+    </div>
     <div class="val-compare-card">
       <div class="chart-header" style="margin-bottom:6px;">
         <div class="chart-title" style="margin:0;font-size:12px;">Intrinsic Value vs Market Price</div>
@@ -392,41 +398,61 @@ function _renderStockPanel(ticker, d) {
   // Initial calc + static historical charts
   _recalcTicker(ticker);
   _renderModelCharts(ticker, d);
-  _setHistoricalBand(ticker, 'pe',   d.pe_history,        'pe',        d.pe_ttm,            '×');
-  _setHistoricalBand(ticker, 'evda', d.ev_ebitda_history, 'ev_ebitda', d.ev_ebitda_current, '×');
-  _setHistoricalBand(ticker, 'ps',   d.ps_history,        'ps',        d.ps_current,        '×');
+  _setHistoricalBand(ticker, 'pe',   d.pe_history,        'pe',        d.pe_ttm,            '\u00d7');
+  _setHistoricalBand(ticker, 'evda', d.ev_ebitda_history, 'ev_ebitda', d.ev_ebitda_current, '\u00d7');
+  _setHistoricalBand(ticker, 'ps',   d.ps_history,        'ps',        d.ps_current,        '\u00d7');
+  _renderSparkline(ticker, d);
+  _fetchAIAnalysis(ticker, d);
   valApplyModelSettings();
 }
 
 function _stockHeaderHTML(d) {
   const upChip = d.beta > 1.2
-    ? `<span class="val-chip red">β ${d.beta} High</span>`
+    ? `<span class="val-chip red">\u03b2 ${d.beta} High</span>`
     : d.beta < 0.8
-    ? `<span class="val-chip green">β ${d.beta} Low</span>`
-    : `<span class="val-chip">β ${d.beta}</span>`;
+    ? `<span class="val-chip green">\u03b2 ${d.beta} Low</span>`
+    : `<span class="val-chip">\u03b2 ${d.beta}</span>`;
+
+  // 1Y price change
+  const ph = d.price_history || [];
+  let changeHTML = '';
+  if (ph.length >= 2) {
+    const first = ph[0].close, last = ph[ph.length-1].close;
+    const chg = last - first, pct = (chg / first) * 100;
+    const up = chg >= 0;
+    changeHTML = `<span class="val-price-change ${up ? 'up' : 'down'}">${up?'+':''}${chg.toFixed(2)} (${up?'+':''}${pct.toFixed(1)}%) 1Y</span>`;
+  }
+
+  const summary = d.business_summary || '';
+  const truncated = summary.length > 300 ? summary.slice(0, 300) + '...' : summary;
+
   return `
-  <div class="val-stock-header">
-    <div>
+  <div class="val-stock-header-top">
+    <div class="val-stock-info">
       <div style="display:flex;align-items:baseline;gap:10px;">
         <span class="val-stock-ticker">${d.ticker}</span>
+        <span class="val-stock-name">${d.name}</span>
         <span style="font-size:11px;color:var(--muted);">${d.currency}</span>
       </div>
-      <div class="val-stock-name">${d.name}</div>
-      <div class="val-stock-chips" style="margin-top:6px;">
+      <div class="val-stock-chips" style="margin-top:8px;">
         <span class="val-chip">${d.sector}</span>
         <span class="val-chip">${d.industry}</span>
         <span class="val-chip">Mkt Cap ${d.market_cap_fmt}</span>
         ${upChip}
-        ${d.pe_ttm ? `<span class="val-chip">P/E ${d.pe_ttm}×</span>` : ''}
-        ${d.ev_ebitda_current ? `<span class="val-chip">EV/EBITDA ${d.ev_ebitda_current}×</span>` : ''}
+        ${d.pe_ttm ? `<span class="val-chip">P/E ${d.pe_ttm}\u00d7</span>` : ''}
+        ${d.ev_ebitda_current ? `<span class="val-chip">EV/EBITDA ${d.ev_ebitda_current}\u00d7</span>` : ''}
         ${d.dividend_annual ? `<span class="val-chip green">Div $${d.dividend_annual} (${d.dividend_yield.toFixed(1)}%)</span>` : '<span class="val-chip">No Dividend</span>'}
         ${_fScoreChipHTML(d)}
         ${_zScoreChipHTML(d)}
       </div>
+      ${truncated ? `<div class="val-biz-summary">${truncated}</div>` : ''}
     </div>
-    <div style="text-align:right;flex-shrink:0;">
-      <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
+    <div class="val-stock-chart-col">
+      <div class="val-price-row">
+        <div class="val-stock-price">${_fp(d.current_price, d.currency)}</div>
+        ${changeHTML}
+      </div>
+      <div id="val-sparkline-${d.ticker}" class="val-sparkline"></div>
     </div>
   </div>`;
 }
@@ -1230,6 +1256,132 @@ function _meanLine(pts, valKey, color) {
     name: `Avg ${avg.toFixed(1)}×`,
     hovertemplate: `Avg: ${avg.toFixed(1)}×<extra></extra>`,
   };
+}
+
+function _renderSparkline(tk, d) {
+  const el = document.getElementById(`val-sparkline-${tk}`);
+  const ph = d.price_history || [];
+  if (!el || ph.length < 2) return;
+  const dates = ph.map(p => p.date);
+  const closes = ph.map(p => p.close);
+  const up = closes[closes.length-1] >= closes[0];
+  const col = up ? '#10b981' : '#ef4444';
+  Plotly.react(el, [{
+    type: 'scatter', mode: 'lines',
+    x: dates, y: closes,
+    line: {color: col, width: 2, shape: 'spline'},
+    fill: 'tozeroy',
+    fillcolor: up ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)',
+    hovertemplate: '%{x}<br>%{y:.2f}<extra></extra>',
+  }], {
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: {color: '#64748b', size: 9},
+    margin: {t: 4, r: 8, b: 20, l: 40},
+    xaxis: {showgrid: false, zeroline: false, fixedrange: true,
+            tickfont: {size: 8}, nticks: 5},
+    yaxis: {showgrid: false, zeroline: false, fixedrange: true,
+            tickfont: {size: 8}, tickprefix: d.currency === 'USD' ? '$' : ''},
+    showlegend: false,
+  }, {displayModeBar: false, responsive: true});
+}
+
+// ── AI Business Analysis ─────────────────────────────────────────────────────
+
+const _aiCache = {};  // ticker → analysis result
+
+async function _fetchAIAnalysis(tk, d) {
+  const container = document.getElementById(`val-ai-${tk}`);
+  if (!container) return;
+
+  // Use cache if available
+  if (_aiCache[tk]) {
+    _renderAIAnalysis(container, tk, _aiCache[tk]);
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/valuation/analysis', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ticker: tk,
+        financials: {
+          name: d.name, sector: d.sector, industry: d.industry,
+          market_cap_fmt: d.market_cap_fmt, revenue_m: d.revenue_m,
+          ebitda_m: d.ebitda_m, ebit_m: d.ebit_m, pe_ttm: d.pe_ttm,
+          ev_ebitda_current: d.ev_ebitda_current, beta: d.beta,
+          business_summary: (d.business_summary || '').slice(0, 500),
+        },
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      container.innerHTML = `<div class="val-ai-error">${data.error}</div>`;
+      return;
+    }
+    _aiCache[tk] = data;
+    _renderAIAnalysis(container, tk, data);
+  } catch (e) {
+    container.innerHTML = `<div class="val-ai-error">AI analysis unavailable</div>`;
+  }
+}
+
+function _renderAIAnalysis(container, tk, a) {
+  const swot = a.swot || {};
+  const bullets = arr => (arr || []).map(b => `<li>${b}</li>`).join('');
+
+  const moatCls = (a.moat_rating || '').toLowerCase() === 'wide' ? 'green'
+    : (a.moat_rating || '').toLowerCase() === 'narrow' ? 'gold' : 'red';
+  const govCls = (a.governance_rating || '').toLowerCase() === 'strong' ? 'green'
+    : (a.governance_rating || '').toLowerCase() === 'average' ? 'gold' : 'red';
+
+  container.innerHTML = `
+    <div class="val-ai-grid">
+      <div class="val-ai-card">
+        <div class="val-ai-card-hd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Business Model
+        </div>
+        <div class="val-ai-card-body">${a.business_model || 'N/A'}</div>
+      </div>
+      <div class="val-ai-card">
+        <div class="val-ai-card-hd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Revenue Segments
+        </div>
+        <div class="val-ai-card-body">${a.revenue_segments || 'N/A'}</div>
+      </div>
+      <div class="val-ai-card val-ai-card-wide">
+        <div class="val-ai-card-hd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
+          SWOT Analysis
+        </div>
+        <div class="val-swot-grid">
+          <div class="val-swot-quad s"><div class="val-swot-title">Strengths</div><ul>${bullets(swot.strengths)}</ul></div>
+          <div class="val-swot-quad w"><div class="val-swot-title">Weaknesses</div><ul>${bullets(swot.weaknesses)}</ul></div>
+          <div class="val-swot-quad o"><div class="val-swot-title">Opportunities</div><ul>${bullets(swot.opportunities)}</ul></div>
+          <div class="val-swot-quad t"><div class="val-swot-title">Threats</div><ul>${bullets(swot.threats)}</ul></div>
+        </div>
+      </div>
+      <div class="val-ai-card">
+        <div class="val-ai-card-hd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Economic Moat
+          <span class="val-chip ${moatCls}" style="margin-left:auto;font-size:9px;">${a.moat_rating || '?'}</span>
+        </div>
+        <div class="val-ai-card-body">${a.moat || 'N/A'}</div>
+      </div>
+      <div class="val-ai-card">
+        <div class="val-ai-card-hd">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Governance
+          <span class="val-chip ${govCls}" style="margin-left:auto;font-size:9px;">${a.governance_rating || '?'}</span>
+        </div>
+        <div class="val-ai-card-body">${a.governance || 'N/A'}</div>
+      </div>
+    </div>
+    <div class="val-ai-disclaimer">AI-generated analysis via Gemini. Verify independently before making investment decisions.</div>
+  `;
 }
 
 function _renderModelCharts(tk, d) {
