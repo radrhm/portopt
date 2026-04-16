@@ -365,7 +365,7 @@
 /* ── CATEGORY SECTION ──────────────────────────────────────── */
 .val-category { margin-bottom: 28px; }
 .val-category-title {
-  font-size: 10px; font-weight: 800; letter-spacing: .12em;
+  font-size: 12px; font-weight: 800; letter-spacing: .12em;
   text-transform: uppercase; color: var(--muted2);
   padding: 0 2px 8px; border-bottom: 1px solid var(--border);
   margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
@@ -374,7 +374,7 @@
 /* ── MODEL GRID ────────────────────────────────────────────── */
 .val-methods-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
 }
 
@@ -390,22 +390,22 @@
   gap: 12px; padding: 12px 14px;
   background: #0d1626; border-bottom: 1px solid var(--border);
 }
-.val-card-title    { font-size: 12px; font-weight: 800; color: var(--text); margin-bottom: 2px; letter-spacing: -.01em; }
-.val-card-subtitle { font-size: 10px; color: var(--muted); line-height: 1.5; max-width: 320px; font-weight: 400; }
-.val-card-result   { font-size: 20px; font-weight: 900; letter-spacing: -.02em; white-space: nowrap; flex-shrink: 0; color: var(--accent2); }
-.val-card-result.sml { font-size: 14px; }
+.val-card-title    { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 2px; letter-spacing: -.01em; }
+.val-card-subtitle { font-size: 12px; color: var(--muted); line-height: 1.5; max-width: 400px; font-weight: 400; }
+.val-card-result   { font-size: 22px; font-weight: 900; letter-spacing: -.02em; white-space: nowrap; flex-shrink: 0; color: var(--accent2); }
+.val-card-result.sml { font-size: 15px; }
 .val-card-result.green { color: var(--green); }
 .val-card-result.red   { color: var(--red); }
 .val-card-result.gold  { color: var(--gold); }
 .val-card-body     { padding: 12px 14px; }
 
 /* ── FCF HISTORY TABLE ─────────────────────────────────────── */
-.val-fcf-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
+.val-fcf-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
 .val-fcf-table th {
-  text-align: left; padding: 4px 8px; background: #0a1020; color: var(--muted);
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  text-align: left; padding: 6px 10px; background: #0a1020; color: var(--muted);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
 }
-.val-fcf-table td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.03); }
+.val-fcf-table td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,.03); }
 .val-fcf-table .pos { color: var(--green); font-weight: 600; }
 .val-fcf-table .neg { color: var(--red);   font-weight: 600; }
 
@@ -417,20 +417,20 @@
   margin-bottom: 10px;
 }
 .val-inputs-grid.col2 { grid-template-columns: 1fr 1fr; }
-.val-inp-group label  { display: block; font-size: 10px; color: var(--muted); margin-bottom: 2px; font-weight: 500; }
+.val-inp-group label  { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; font-weight: 500; }
 .val-inp-group input  {
   width: 100%; background: #0a1020; border: 1px solid var(--border);
-  border-radius: 5px; padding: 5px 8px; color: var(--text);
-  font-size: 12px; outline: none; transition: border .15s;
+  border-radius: 5px; padding: 7px 10px; color: var(--text);
+  font-size: 14px; outline: none; transition: border .15s;
 }
 .val-inp-group input:focus { border-color: var(--accent); }
-.val-inp-hint { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.val-inp-hint { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
 
 /* ── UPSIDE / DOWNSIDE ─────────────────────────────────────── */
 .val-updown {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 6px;
-  font-size: 11px; font-weight: 700; margin-top: 8px;
+  font-size: 13px; font-weight: 700; margin-top: 8px;
 }
 .val-updown.up      { background: rgba(16,185,129,.1); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
 .val-updown.down    { background: rgba(239,68,68,.1);  color: var(--red);   border: 1px solid rgba(239,68,68,.2);  }
@@ -447,13 +447,13 @@
 .val-workings-panel {
   display: none; margin-top: 8px; background: #060d1a;
   border: 1px solid var(--border); border-radius: 6px;
-  padding: 12px 14px; font-size: 11px; line-height: 1.8; color: var(--muted2);
+  padding: 12px 14px; font-size: 13px; line-height: 1.8; color: var(--muted2);
 }
 .val-workings-panel.open { display: block; }
-.val-workings-panel .step { display: flex; gap: 8px; padding: 2px 0; }
+.val-workings-panel .step { display: flex; gap: 8px; padding: 3px 0; }
 .val-workings-panel .step-num   { color: var(--accent2); font-weight: 700; min-width: 20px; flex-shrink: 0; }
-.val-workings-panel .step-eq    { color: var(--text); font-family: monospace; font-size: 11px; }
-.val-workings-panel .step-label { color: var(--muted); font-size: 10px; margin-top: 1px; }
+.val-workings-panel .step-eq    { color: var(--text); font-family: monospace; font-size: 12px; }
+.val-workings-panel .step-label { color: var(--muted); font-size: 11px; margin-top: 1px; }
 
 /* ── TWO RESULTS ───────────────────────────────────────────── */
 .val-two-results { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -462,12 +462,12 @@
   background: #0a1020; border-radius: 5px;
   padding: 5px 10px; flex: 1; min-width: 140px;
 }
-.val-two-label { font-size: 10px; color: var(--muted); flex: 1; }
+.val-two-label { font-size: 12px; color: var(--muted); flex: 1; }
 
 /* ── MODEL MINI CHART ──────────────────────────────────────── */
 .val-mchart {
-  height: 130px;
-  margin-bottom: 10px;
+  height: 150px;
+  margin-bottom: 12px;
   border-radius: 4px;
   overflow: hidden;
   background: #060d1a;
@@ -564,7 +564,7 @@
 .val-note {
   background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
   color: var(--gold); border-radius: 6px;
-  padding: 7px 10px; font-size: 11px; line-height: 1.5;
+  padding: 8px 12px; font-size: 12px; line-height: 1.6;
 }
 
 /* ── HISTORICAL PERCENTILE BAND ────────────────────────────── */

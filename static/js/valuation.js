@@ -570,17 +570,15 @@ function _inp(id, label, val, hint, step='0.01', min='', max='') {
 function _dcfCardHTML(tk, d) {
   const g1  = Math.min(d.earnings_growth_pct, 40).toFixed(1);
   const g2  = Math.min(d.earnings_growth_pct * 0.6, 25).toFixed(1);
-  const fcfHistory = d.historical_fcf.length
+  const fcfData = d.historical_fcf.slice(0, 4);  // last 4 years
+  const fcfHistory = fcfData.length
     ? `<table class="val-fcf-table">
         <thead><tr><th>Year</th><th>Op. Cash Flow ($M)</th><th>CapEx ($M)</th><th>FCF ($M)</th></tr></thead>
-        <tbody>${d.historical_fcf.map(r => `
+        <tbody>${fcfData.map(r => `
           <tr><td>${r.year}</td><td>${r.op_cf_m.toLocaleString()}</td>
           <td class="neg">${r.capex_m.toLocaleString()}</td>
           <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td></tr>`).join('')}
-        </tbody></table>
-        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">
-          ℹ️ yfinance provides up to 4 years of annual cash flow data.
-        </div>`
+        </tbody></table>`
     : `<div class="val-note" style="margin-bottom:8px;">No historical cash flow data available.</div>`;
 
   const body = `
@@ -1316,13 +1314,13 @@ async function _fetchAIAnalysis(tk, d) {
     });
     const data = await resp.json();
     if (data.error) {
-      container.innerHTML = `<div class="val-ai-error">${data.error}</div>`;
+      container.style.display = 'none';
       return;
     }
     _aiCache[tk] = data;
     _renderAIAnalysis(container, tk, data);
   } catch (e) {
-    container.innerHTML = `<div class="val-ai-error">AI analysis unavailable</div>`;
+    container.style.display = 'none';
   }
 }
 
@@ -1385,8 +1383,8 @@ function _renderAIAnalysis(container, tk, a) {
 }
 
 function _renderModelCharts(tk, d) {
-  // ── DCF: FCF bar chart ────────────────────────────────────────────────
-  const fcf = (d.historical_fcf || []).slice().reverse();
+  // ── DCF: FCF bar chart (last 4 years) ─────────────────────────────────
+  const fcf = (d.historical_fcf || []).slice(0, 4).reverse();
   if (fcf.length >= 2 && document.getElementById(`mchart-${tk}-dcf`)) {
     const vals = fcf.map(r => r.fcf_m);
     Plotly.react(`mchart-${tk}-dcf`, [{
