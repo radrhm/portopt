@@ -392,6 +392,9 @@ function _renderStockPanel(ticker, d) {
   // Initial calc + static historical charts
   _recalcTicker(ticker);
   _renderModelCharts(ticker, d);
+  _setHistoricalBand(ticker, 'pe',   d.pe_history,        'pe',        d.pe_ttm,            '×');
+  _setHistoricalBand(ticker, 'evda', d.ev_ebitda_history, 'ev_ebitda', d.ev_ebitda_current, '×');
+  _setHistoricalBand(ticker, 'ps',   d.ps_history,        'ps',        d.ps_current,        '×');
   valApplyModelSettings();
 }
 
@@ -417,6 +420,8 @@ function _stockHeaderHTML(d) {
         ${d.pe_ttm ? `<span class="val-chip">P/E ${d.pe_ttm}×</span>` : ''}
         ${d.ev_ebitda_current ? `<span class="val-chip">EV/EBITDA ${d.ev_ebitda_current}×</span>` : ''}
         ${d.dividend_annual ? `<span class="val-chip green">Div $${d.dividend_annual} (${d.dividend_yield.toFixed(1)}%)</span>` : '<span class="val-chip">No Dividend</span>'}
+        ${_fScoreChipHTML(d)}
+        ${_zScoreChipHTML(d)}
       </div>
     </div>
     <div style="text-align:right;flex-shrink:0;">
@@ -424,6 +429,22 @@ function _stockHeaderHTML(d) {
       <div style="font-size:10px;color:var(--muted);margin-top:2px;">Current Market Price</div>
     </div>
   </div>`;
+}
+
+function _fScoreChipHTML(d) {
+  if (d.f_score === undefined || d.f_score === null) return '';
+  const f = d.f_score;
+  const cls = f >= 7 ? 'green' : (f <= 3 ? 'red' : 'gold');
+  const label = f >= 7 ? 'Strong' : (f <= 3 ? 'Weak' : 'Mixed');
+  return `<span class="val-chip ${cls}" title="Piotroski F-Score: 9-point quality test (profitability, leverage, efficiency)">F-Score ${f}/9 ${label}</span>`;
+}
+
+function _zScoreChipHTML(d) {
+  if (d.z_score === undefined || d.z_score === null) return '';
+  const band = d.z_score_band || 'grey';
+  const cls = band === 'safe' ? 'green' : (band === 'distress' ? 'red' : 'gold');
+  const label = band === 'safe' ? 'Safe' : (band === 'distress' ? 'Distress' : 'Grey');
+  return `<span class="val-chip ${cls}" title="Altman Z-Score: bankruptcy risk model. >2.99 safe, 1.81-2.99 grey, <1.81 distress">Z ${d.z_score} ${label}</span>`;
 }
 
 // ── Categories & model HTML ───────────────────────────────────────────────────
@@ -440,6 +461,7 @@ function _categoriesHTML(tk, d) {
     </div>
     <div class="val-methods-grid">
       ${_dcfCardHTML(tk, d)}
+      ${_reverseDcfCardHTML(tk, d)}
       ${_epvCardHTML(tk, d)}
     </div>
   </div>
@@ -553,6 +575,27 @@ function _dcfCardHTML(tk, d) {
     body);
 }
 
+// 1b. Reverse DCF ──────────────────────────────────────────────────────────────
+function _reverseDcfCardHTML(tk, d) {
+  const body = `
+    <div class="val-note" style="margin-bottom:8px;">
+      Solves for the FCF growth rate the current market price is pricing in. High implied growth = priced for perfection.
+    </div>
+    <div class="val-inputs-grid">
+      ${_inp(`${tk}-rdcf-fcf`,   'FCF — Latest Year ($M)', d.fcf_total_m, 'Total free cash flow, most recent year', '1')}
+      ${_inp(`${tk}-rdcf-shares`, 'Shares Outstanding (M)', d.shares_m, 'Diluted shares outstanding', '0.1', '0.001')}
+      ${_inp(`${tk}-rdcf-wacc`,  'WACC (%)', d.wacc_suggestion, 'Discount rate', '0.1', '3', '30')}
+      ${_inp(`${tk}-rdcf-tg`,    'Terminal Growth (%)', '2.5', 'Perpetual growth after yr 10', '0.1', '0', '5')}
+    </div>
+    <div class="val-two-results">
+      <div class="val-two-item"><span class="val-two-label">Implied 5-yr Growth</span><span class="val-card-result sml" id="res-${tk}-rdcf-g">—</span></div>
+      <div class="val-two-item"><span class="val-two-label">Interpretation</span><span class="val-card-result sml" id="res-${tk}-rdcf-note" style="font-size:11px;">—</span></div>
+    </div>`;
+  return _cardWrap('rdcf', tk, 'Reverse DCF (Implied Growth)',
+    'Inverts the DCF: given today\u2019s price, what FCF growth is baked in?',
+    body);
+}
+
 // 2. EPV ───────────────────────────────────────────────────────────────────────
 function _epvCardHTML(tk, d) {
   const body = `
@@ -592,6 +635,7 @@ function _peCardHTML(tk, d) {
   const fwdPe = Math.max((d.sector_pe - 2), 10).toFixed(1);
   const body = `
     <div id="mchart-${tk}-pe" class="val-mchart"></div>
+    ${_historicalBandHTML(tk, 'pe')}
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-pe-epsttm`, 'EPS TTM ($)', d.eps_ttm,    'Trailing twelve months earnings per share', '0.01')}
       ${_inp(`${tk}-pe-epsfwd`, 'EPS Forward ($)', d.eps_forward, 'Next twelve months consensus estimate', '0.01')}
@@ -611,6 +655,7 @@ function _peCardHTML(tk, d) {
 function _evEbitdaCardHTML(tk, d) {
   const body = `
     <div id="mchart-${tk}-evda" class="val-mchart"></div>
+    ${_historicalBandHTML(tk, 'evda')}
     <div class="val-inputs-grid">
       ${_inp(`${tk}-evda-ebitda`, 'EBITDA ($M)', d.ebitda_m, 'Earnings before interest, tax, D&A', '10')}
       ${_inp(`${tk}-evda-mult`,   'Target EV/EBITDA ×', d.sector_ev, 'Sector fair-value multiple', '0.5', '1')}
@@ -642,6 +687,7 @@ function _evEbitCardHTML(tk, d) {
 function _psCardHTML(tk, d) {
   const body = `
     <div id="mchart-${tk}-ps" class="val-mchart"></div>
+    ${_historicalBandHTML(tk, 'ps')}
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-ps-rev`,    'Revenue ($M)', d.revenue_m, 'Last twelve months total revenue', '10')}
       ${_inp(`${tk}-ps-mult`,   'Target P/S ×', d.sector_ps, 'Price-to-sales multiple for sector', '0.1', '0.1')}
@@ -697,6 +743,50 @@ function _ncavCardHTML(tk, d) {
     body);
 }
 
+// ── Historical percentile bands ──────────────────────────────────────────────
+
+function _historicalBandHTML(tk, modelId) {
+  return `
+  <div class="val-hband" id="hband-${tk}-${modelId}" style="display:none;">
+    <div class="val-hband-label">
+      <span id="hband-${tk}-${modelId}-title">Historical range</span>
+      <span id="hband-${tk}-${modelId}-pct"></span>
+    </div>
+    <div class="val-hband-bar">
+      <div class="val-hband-fill" id="hband-${tk}-${modelId}-fill"></div>
+      <div class="val-hband-marker" id="hband-${tk}-${modelId}-marker"></div>
+    </div>
+    <div class="val-hband-range">
+      <span id="hband-${tk}-${modelId}-min"></span>
+      <span id="hband-${tk}-${modelId}-med"></span>
+      <span id="hband-${tk}-${modelId}-max"></span>
+    </div>
+  </div>`;
+}
+
+function _setHistoricalBand(tk, modelId, history, key, current, suffix) {
+  const el = document.getElementById(`hband-${tk}-${modelId}`);
+  if (!el) return;
+  if (!history || history.length < 3 || !current) { el.style.display = 'none'; return; }
+  const vals = history.map(h => h[key]).filter(v => v && v > 0).sort((a,b)=>a-b);
+  if (vals.length < 3) { el.style.display = 'none'; return; }
+  const mn = vals[0], mx = vals[vals.length-1];
+  const med = vals[Math.floor(vals.length/2)];
+  const below = vals.filter(v => v <= current).length;
+  const pct = Math.round((below / vals.length) * 100);
+  const clamped = Math.max(0, Math.min(100, ((current - mn) / (mx - mn || 1)) * 100));
+  const band = pct <= 33 ? 'green' : (pct >= 67 ? 'red' : 'gold');
+  const fmt = v => `${v.toFixed(1)}${suffix}`;
+  el.style.display = '';
+  el.className = `val-hband ${band}`;
+  document.getElementById(`hband-${tk}-${modelId}-pct`).textContent   = `${pct}th percentile · now ${fmt(current)}`;
+  document.getElementById(`hband-${tk}-${modelId}-min`).textContent   = `min ${fmt(mn)}`;
+  document.getElementById(`hband-${tk}-${modelId}-med`).textContent   = `median ${fmt(med)}`;
+  document.getElementById(`hband-${tk}-${modelId}-max`).textContent   = `max ${fmt(mx)}`;
+  document.getElementById(`hband-${tk}-${modelId}-marker`).style.left = `${clamped}%`;
+  document.getElementById(`hband-${tk}-${modelId}-fill`).style.width  = `${clamped}%`;
+}
+
 // ── Calculations ──────────────────────────────────────────────────────────────
 
 function _recalcTicker(tk) {
@@ -720,6 +810,36 @@ function _recalcTicker(tk) {
   _setResult(`res-${tk}-dcf`, results.dcf, cur);
   _setUD(`ud-${tk}-dcf`, results.dcf, price);
   _setDCFWorkings(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, results.dcf, cur);
+
+  // Reverse DCF — solves for implied growth, NOT added to `results` (excluded from compare chart)
+  const rdFcf = _gv(`${tk}-rdcf-fcf`);
+  const rdSh  = Math.max(_gv(`${tk}-rdcf-shares`), 0.001);
+  const rdFcfPs = rdSh > 0 ? (rdFcf * 1e6) / (rdSh * 1e6) : 0;
+  const rdWacc  = _gv(`${tk}-rdcf-wacc`) / 100;
+  const rdTg    = _gv(`${tk}-rdcf-tg`)   / 100;
+  const impliedG = _calcReverseDCF(rdFcfPs, rdWacc, rdTg, price);
+  const gEl = document.getElementById(`res-${tk}-rdcf-g`);
+  const nEl = document.getElementById(`res-${tk}-rdcf-note`);
+  const mainEl = document.getElementById(`res-${tk}-rdcf`);
+  if (impliedG === null) {
+    if (gEl) gEl.textContent = 'N/A';
+    if (nEl) { nEl.textContent = 'Cannot solve'; nEl.className = 'val-card-result sml'; }
+    if (mainEl) { mainEl.textContent = '—'; mainEl.className = 'val-card-result'; }
+  } else {
+    const pct = impliedG * 100;
+    const txt = `${pct.toFixed(1)}%`;
+    let note, cls;
+    if (pct < 0)       { note = 'Undervalued (decline priced in)'; cls = 'green'; }
+    else if (pct < 8)  { note = 'Modest expectations';             cls = 'green'; }
+    else if (pct < 15) { note = 'Solid growth expected';           cls = ''; }
+    else if (pct < 25) { note = 'Aggressive expectations';         cls = 'gold'; }
+    else               { note = 'Priced for perfection';           cls = 'red'; }
+    if (gEl) { gEl.textContent = txt; gEl.className = `val-card-result sml ${cls}`; }
+    if (nEl) { nEl.textContent = note; nEl.className = `val-card-result sml ${cls}`; }
+    if (mainEl) { mainEl.textContent = txt; mainEl.className = `val-card-result ${cls}`; }
+  }
+  const udEl = document.getElementById(`ud-${tk}-rdcf`);
+  if (udEl) udEl.innerHTML = '';
 
   // EPV
   const epvEbit    = _gv(`${tk}-epv-ebit`);
@@ -847,6 +967,25 @@ function _calcEVMult(earnM, mult, netDebtM, sharesM) {
   if (!earnM || !mult || !sharesM || sharesM <= 0) return null;
   const equity = earnM * mult - netDebtM;  // $M
   return equity > 0 ? r2((equity * 1e6) / (sharesM * 1e6)) : null;
+}
+
+function _calcReverseDCF(fcfPs, wacc, tg, targetPrice) {
+  if (!fcfPs || fcfPs <= 0 || wacc <= tg || wacc <= 0 || !targetPrice || targetPrice <= 0) return null;
+  // Bisect over g1 in [-0.30, 1.00] to find the growth rate that produces targetPrice
+  let lo = -0.30, hi = 1.00;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    const g1 = mid, g2 = mid * 0.6;
+    let pv = 0, cf = fcfPs;
+    for (let y = 1; y <= 5;  y++) { cf *= (1 + g1); pv += cf / Math.pow(1 + wacc, y); }
+    for (let y = 6; y <= 10; y++) { cf *= (1 + g2); pv += cf / Math.pow(1 + wacc, y); }
+    const tv = (cf * (1 + tg)) / (wacc - tg);
+    pv += tv / Math.pow(1 + wacc, 10);
+    if (pv > targetPrice) hi = mid; else lo = mid;
+  }
+  const result = (lo + hi) / 2;
+  if (result <= -0.299 || result >= 0.999) return null;
+  return result;
 }
 
 // ── Workings panels ───────────────────────────────────────────────────────────
@@ -1588,6 +1727,7 @@ function _escHtml(s) {
 const _VAL_SETTINGS_KEY = 'portopt_val_settings_v1';
 const _VAL_MODEL_LIST = [
   { id: 'dcf',    label: 'Discounted Cash Flow (DCF)', cat: 'Cash Flow' },
+  { id: 'rdcf',   label: 'Reverse DCF (Implied Growth)', cat: 'Cash Flow' },
   { id: 'epv',    label: 'Earnings Power Value (EPV)', cat: 'Cash Flow' },
   { id: 'ddm',    label: 'Dividend Discount Model (DDM)', cat: 'Dividend' },
   { id: 'pe',     label: 'Price / Earnings (P/E)',     cat: 'Multiples' },

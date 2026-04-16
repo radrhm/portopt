@@ -204,6 +204,9 @@ def fetch_financials(ticker: str) -> dict:
     div_rate  = float(info.get("dividendRate")  or 0)
     div_yield = float(info.get("dividendYield") or 0) * 100
 
+    # ── Piotroski F-Score & Altman Z-Score ───────────────────────
+    scores = _calc_scores(t, mktcap)
+
     # ── Historical annual data for model charts ───────────────────
     pe_history        = []
     ps_history        = []
@@ -394,6 +397,9 @@ def fetch_financials(ticker: str) -> dict:
         "revenue_annual":     revenue_annual,
         "eps_history":        eps_history,
         "dividend_history":   dividend_history,
+
+        # Quality scores
+        **scores,
     }
 
 
@@ -403,6 +409,138 @@ def _isnan(v) -> bool:
         return v is None or (isinstance(v, float) and math.isnan(v))
     except Exception:
         return False
+
+
+def _get_label(df, labels, col):
+    """Return first matching label value as float, or None."""
+    if df is None or df.empty:
+        return None
+    for lbl in labels:
+        if lbl in df.index:
+            try:
+                v = df.loc[lbl, col]
+                if not _isnan(v):
+                    return float(v)
+            except Exception:
+                continue
+    return None
+
+
+def _calc_scores(t, mktcap: float) -> dict:
+    """Piotroski F-Score (9 tests) + Altman Z-Score."""
+    out = {}
+    try:
+        fin = t.financials
+        bs  = t.balance_sheet
+        cf  = t.cashflow
+        if fin is None or fin.empty or bs is None or bs.empty:
+            return out
+        if len(fin.columns) < 2 or len(bs.columns) < 2:
+            # Not enough history for YoY tests — still try Z-score
+            pass
+
+        c0 = fin.columns[0]
+        c1 = fin.columns[1] if len(fin.columns) > 1 else None
+        b0 = bs.columns[0]
+        b1 = bs.columns[1] if len(bs.columns) > 1 else None
+        cf0 = cf.columns[0] if (cf is not None and not cf.empty) else None
+
+        # Income statement values
+        ni_labels   = ("Net Income", "Net Income Common Stockholders", "Net Income Continuous Operations")
+        rev_labels  = ("Total Revenue", "Revenue", "Operating Revenue")
+        gp_labels   = ("Gross Profit",)
+
+        ni_0   = _get_label(fin, ni_labels, c0)
+        rev_0  = _get_label(fin, rev_labels, c0)
+        rev_1  = _get_label(fin, rev_labels, c1) if c1 is not None else None
+        gp_0   = _get_label(fin, gp_labels, c0)
+        gp_1   = _get_label(fin, gp_labels, c1) if c1 is not None else None
+        ebit_0 = _get_label(fin, ("EBIT", "Operating Income", "Ebit"), c0)
+
+        # Balance sheet values
+        ta_labels  = ("Total Assets",)
+        tl_labels  = ("Total Liabilities Net Minority Interest", "Total Liabilities")
+        ca_labels  = ("Current Assets", "Total Current Assets")
+        cl_labels  = ("Current Liabilities", "Total Current Liabilities")
+        ltd_labels = ("Long Term Debt", "Long Term Debt And Capital Lease Obligation")
+        sh_labels  = ("Share Issued", "Ordinary Shares Number", "Common Stock")
+        re_labels  = ("Retained Earnings",)
+
+        ta_0  = _get_label(bs, ta_labels, b0)
+        ta_1  = _get_label(bs, ta_labels, b1) if b1 is not None else None
+        tl_0  = _get_label(bs, tl_labels, b0)
+        ca_0  = _get_label(bs, ca_labels, b0)
+        ca_1  = _get_label(bs, ca_labels, b1) if b1 is not None else None
+        cl_0  = _get_label(bs, cl_labels, b0)
+        cl_1  = _get_label(bs, cl_labels, b1) if b1 is not None else None
+        ltd_0 = _get_label(bs, ltd_labels, b0)
+        ltd_1 = _get_label(bs, ltd_labels, b1) if b1 is not None else None
+        sh_0  = _get_label(bs, sh_labels, b0)
+        sh_1  = _get_label(bs, sh_labels, b1) if b1 is not None else None
+        re_0  = _get_label(bs, re_labels, b0)
+
+        # Cashflow values
+        ocf_0 = _get_label(cf, ("Operating Cash Flow", "Cash Flow From Continuing Operating Activities"), cf0) if cf0 is not None else None
+
+        # ── Piotroski F-Score ──────────────────────────────────────
+        tests = {}
+        # 1. Profitability: Net income > 0
+        tests["profit_pos"] = 1 if (ni_0 is not None and ni_0 > 0) else 0
+        # 2. ROA > 0
+        roa_0 = (ni_0 / ta_0) if (ni_0 is not None and ta_0) else None
+        tests["roa_pos"] = 1 if (roa_0 is not None and roa_0 > 0) else 0
+        # 3. OCF > 0
+        tests["ocf_pos"] = 1 if (ocf_0 is not None and ocf_0 > 0) else 0
+        # 4. OCF > Net Income (quality of earnings)
+        tests["accruals"] = 1 if (ocf_0 is not None and ni_0 is not None and ocf_0 > ni_0) else 0
+        # 5. LT Debt / Total Assets decreased
+        if ltd_0 is not None and ltd_1 is not None and ta_0 and ta_1:
+            tests["leverage"] = 1 if (ltd_0 / ta_0) < (ltd_1 / ta_1) else 0
+        else:
+            tests["leverage"] = 0
+        # 6. Current ratio increased
+        if ca_0 and cl_0 and ca_1 and cl_1:
+            tests["liquidity"] = 1 if (ca_0 / cl_0) > (ca_1 / cl_1) else 0
+        else:
+            tests["liquidity"] = 0
+        # 7. No new shares issued (shares <= prior +0.5%)
+        if sh_0 and sh_1:
+            tests["dilution"] = 1 if sh_0 <= sh_1 * 1.005 else 0
+        else:
+            tests["dilution"] = 0
+        # 8. Gross margin increased
+        if gp_0 is not None and gp_1 is not None and rev_0 and rev_1:
+            tests["margin"] = 1 if (gp_0 / rev_0) > (gp_1 / rev_1) else 0
+        else:
+            tests["margin"] = 0
+        # 9. Asset turnover increased
+        if rev_0 and rev_1 and ta_0 and ta_1:
+            tests["turnover"] = 1 if (rev_0 / ta_0) > (rev_1 / ta_1) else 0
+        else:
+            tests["turnover"] = 0
+
+        out["f_score"] = sum(tests.values())
+        out["f_score_details"] = tests
+
+        # ── Altman Z-Score ─────────────────────────────────────────
+        if ta_0 and tl_0:
+            wc = (ca_0 or 0) - (cl_0 or 0)
+            A = wc / ta_0
+            B = (re_0 / ta_0) if re_0 is not None else 0
+            C = (ebit_0 / ta_0) if ebit_0 is not None else 0
+            D = (mktcap / tl_0) if (mktcap and tl_0) else 0
+            E = (rev_0 / ta_0) if rev_0 else 0
+            z = 1.2 * A + 1.4 * B + 3.3 * C + 0.6 * D + 1.0 * E
+            out["z_score"] = round(z, 2)
+            if z > 2.99:
+                out["z_score_band"] = "safe"
+            elif z >= 1.81:
+                out["z_score_band"] = "grey"
+            else:
+                out["z_score_band"] = "distress"
+    except Exception as e:
+        logger.warning("Could not compute quality scores: %s", e)
+    return out
 
 
 def _fmt_large(n: float) -> str:
