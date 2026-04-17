@@ -1,14 +1,16 @@
 """Persistence layer — PostgreSQL (Supabase) in production, SQLite locally.
 
 Automatically picks the right backend:
-  - DATABASE_URL env var set  →  PostgreSQL (Vercel / Supabase)
+  - DATABASE_URL env var set  →  PostgreSQL (Vercel / Supabase) via pg8000
   - No DATABASE_URL           →  SQLite file next to this module (local dev)
 """
 
 import json
 import logging
 import os
+import ssl
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +25,29 @@ def _utcnow() -> str:
 # ── Connection helpers ───────────────────────────────────────────────────────
 
 def _pg_conn():
-    import psycopg2
-    import psycopg2.extras
-    conn = psycopg2.connect(_DATABASE_URL)
+    import pg8000.dbapi
+    parsed = urlparse(_DATABASE_URL)
+    ssl_ctx = ssl.create_default_context()
+    conn = pg8000.dbapi.connect(
+        host=parsed.hostname,
+        port=parsed.port or 5432,
+        database=parsed.path.lstrip("/"),
+        user=parsed.username,
+        password=parsed.password,
+        ssl_context=ssl_ctx,
+    )
     return conn
+
+
+def _pg_rows(cursor) -> list[dict]:
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
+def _pg_row(cursor) -> dict | None:
+    cols = [d[0] for d in cursor.description]
+    row = cursor.fetchone()
+    return dict(zip(cols, row)) if row else None
 
 
 def _sqlite_conn():
@@ -133,10 +154,8 @@ def init_db() -> None:
 
 
 def _init_pg() -> None:
-    import psycopg2
     conn = _pg_conn()
     cur = conn.cursor()
-    # Ensure schema_version exists first
     cur.execute("""CREATE TABLE IF NOT EXISTS schema_version (
                        version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL
                    )""")
@@ -199,10 +218,9 @@ def _deserialize(d: dict) -> dict:
 def list_portfolios() -> list[dict]:
     conn = get_conn()
     if _USE_PG:
-        import psycopg2.extras
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM portfolios ORDER BY updated_at DESC")
-        rows = [dict(r) for r in cur.fetchall()]
+        rows = _pg_rows(cur)
         cur.close()
     else:
         rows = [dict(r) for r in conn.execute(
@@ -215,12 +233,10 @@ def list_portfolios() -> list[dict]:
 def get_portfolio(pid: int) -> dict | None:
     conn = get_conn()
     if _USE_PG:
-        import psycopg2.extras
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM portfolios WHERE id=%s", (pid,))
-        row = cur.fetchone()
+        row = _pg_row(cur)
         cur.close()
-        row = dict(row) if row else None
     else:
         row = conn.execute("SELECT * FROM portfolios WHERE id=?", (pid,)).fetchone()
         row = dict(row) if row else None
@@ -300,13 +316,12 @@ def delete_portfolio(pid: int) -> None:
 def list_val_lists() -> list[dict]:
     conn = get_conn()
     if _USE_PG:
-        import psycopg2.extras
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor()
         cur.execute(
             "SELECT id, name, created_at, updated_at, tickers "
             "FROM valuation_lists ORDER BY updated_at DESC"
         )
-        rows = [dict(r) for r in cur.fetchall()]
+        rows = _pg_rows(cur)
         cur.close()
     else:
         rows = [dict(r) for r in conn.execute(
@@ -327,12 +342,10 @@ def list_val_lists() -> list[dict]:
 def get_val_list(lid: int) -> dict | None:
     conn = get_conn()
     if _USE_PG:
-        import psycopg2.extras
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT * FROM valuation_lists WHERE id=%s", (lid,))
-        row = cur.fetchone()
+        row = _pg_row(cur)
         cur.close()
-        row = dict(row) if row else None
     else:
         row = conn.execute("SELECT * FROM valuation_lists WHERE id=?", (lid,)).fetchone()
         row = dict(row) if row else None
@@ -409,15 +422,15 @@ def get_setting(key: str) -> dict:
     """Return the JSON value for *key*, or {} if not found."""
     conn = get_conn()
     if _USE_PG:
-        import psycopg2.extras
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor()
         cur.execute("SELECT value FROM user_settings WHERE key=%s", (key,))
-        row = cur.fetchone()
+        row = _pg_row(cur)
         cur.close()
     else:
         row = conn.execute(
             "SELECT value FROM user_settings WHERE key=?", (key,)
         ).fetchone()
+        row = dict(row) if row else None
     conn.close()
     if not row:
         return {}
