@@ -577,11 +577,7 @@ def _fmt_large(n: float) -> str:
 
 def get_business_analysis(ticker: str, financials: dict) -> dict:
     """Call Gemini to generate structured business analysis for a company."""
-    import os, json, traceback, concurrent.futures
-
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        return {"error": "No GEMINI_API_KEY configured"}
+    from .gemini import generate_json
 
     prompt = f"""You are a senior equity research analyst. Produce a structured business analysis for {ticker} ({financials.get('name', ticker)}).
 
@@ -615,37 +611,9 @@ Return ONLY valid JSON with these exact keys:
 
 Be specific to this company. Reference actual facts. Return only valid JSON."""
 
-    def _call():
-        import requests as _req
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.0-flash:generateContent?key={api_key}"
-        )
-        body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.3},
-        }
-        try:
-            r = _req.post(url, json=body, timeout=18)
-            r.raise_for_status()
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```"):
-                text = text.split("```", 2)[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.rsplit("```", 1)[0]
-            return json.loads(text.strip())
-        except Exception:
-            logger.warning("Gemini business analysis failed: %s", traceback.format_exc())
-            return None
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_call)
-        try:
-            result = future.result(timeout=20)
-            if result:
-                return result
-        except concurrent.futures.TimeoutError:
-            logger.warning("Gemini business analysis timed out.")
-
-    return {"error": "AI analysis unavailable"}
+    # Cache per-ticker per-sector — changes in financials rarely alter analysis
+    cache_key = f"biz_analysis:{ticker.upper()}:{financials.get('sector', '')}"
+    result = generate_json(prompt, cache_key=cache_key, temperature=0.3)
+    if result is None:
+        return {"error": "AI analysis unavailable"}
+    return result

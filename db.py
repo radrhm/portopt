@@ -30,10 +30,11 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
-def init_db() -> None:
-    try:
-        conn = get_conn()
-        conn.executescript("""
+# Migrations list — each entry is (version_int, sql_script). Never mutate past
+# entries; append new ones. init_db() applies any not yet recorded in
+# schema_version.
+_MIGRATIONS: list[tuple[int, str]] = [
+    (1, """
         CREATE TABLE IF NOT EXISTS portfolios (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             name           TEXT NOT NULL DEFAULT 'Untitled',
@@ -54,10 +55,35 @@ def init_db() -> None:
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             tickers    TEXT NOT NULL DEFAULT '[]'
         );
-        """)
+    """),
+]
+
+
+def _current_version(conn: sqlite3.Connection) -> int:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version "
+        "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    row = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_version").fetchone()
+    return int(row[0])
+
+
+def init_db() -> None:
+    """Apply any pending migrations. Safe to call on every import."""
+    try:
+        conn = get_conn()
+        current = _current_version(conn)
+        for version, script in _MIGRATIONS:
+            if version > current:
+                conn.executescript(script)
+                conn.execute(
+                    "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+                    (version, _utcnow()),
+                )
+                logger.info("Applied migration v%d", version)
         conn.commit()
         conn.close()
-    except Exception:
+    except sqlite3.Error:
         logger.exception("init_db failed — portfolio persistence unavailable")
 
 

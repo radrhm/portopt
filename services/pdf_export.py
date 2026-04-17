@@ -1,13 +1,13 @@
 """PDF report generation — reportlab layout, Gemini AI text via REST API."""
 
-import io
-import os
-import json
 import base64
+import io
+import json
 import logging
-import traceback
-import concurrent.futures
+import os
 from datetime import datetime
+
+from .gemini import generate_json
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +50,6 @@ METHOD_DESCRIPTIONS = {
 
 def _get_gemini_text(metrics: dict, weights: dict, method: str,
                      tickers: list, settings: dict, desc_stats: dict) -> dict:
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        return _default_ai_text(method, metrics)
-
     prompt = f"""You are a senior investment analyst writing a professional portfolio report for an investor client.
 The tone should be clear, confident, and written in plain English — like a letter from a fund manager to their investors.
 Avoid jargon, equations, or academic language. Focus on what the numbers mean for the investor.
@@ -98,40 +94,8 @@ Write investor-friendly analysis in JSON with these exact keys:
 Reference actual numbers from the data. Write every section as if explaining to an intelligent investor who is not a quant.
 Return only valid JSON."""
 
-    def _call():
-        import requests as _req
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.0-flash:generateContent?key={api_key}"
-        )
-        body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 2048, "temperature": 0.4},
-        }
-        try:
-            r = _req.post(url, json=body, timeout=18)
-            r.raise_for_status()
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```"):
-                text = text.split("```", 2)[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.rsplit("```", 1)[0]
-            return json.loads(text.strip())
-        except Exception:
-            logger.warning("Gemini REST call failed: %s", traceback.format_exc())
-            return None
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_call)
-        try:
-            result = future.result(timeout=20)
-            if result:
-                return result
-        except concurrent.futures.TimeoutError:
-            logger.warning("Gemini API timed out; using default text.")
-
-    return _default_ai_text(method, metrics)
+    result = generate_json(prompt, temperature=0.4)
+    return result if result is not None else _default_ai_text(method, metrics)
 
 
 def _default_ai_text(method: str, metrics: dict) -> dict:

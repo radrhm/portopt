@@ -1,19 +1,23 @@
 """PortOpt — Flask entry point."""
 
 import logging
-from flask import Flask, render_template, jsonify
 
+from flask import Flask, jsonify, render_template
+
+import config
+from middleware import register_middleware
+from routes.export import export_bp
 from routes.optimize import optimize_bp
 from routes.portfolio import portfolio_bp
-from routes.export import export_bp
 from routes.valuation import valuation_bp
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s %(name)s %(message)s",
+    level=getattr(logging, config.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
 app = Flask(__name__)
+register_middleware(app)
 app.register_blueprint(optimize_bp)
 app.register_blueprint(portfolio_bp)
 app.register_blueprint(export_bp)
@@ -31,4 +35,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=config.DEBUG, port=5000)
