@@ -76,6 +76,13 @@ _PG_MIGRATIONS = [
                tickers    TEXT NOT NULL DEFAULT '[]'
            )""",
     ]),
+    (2, [
+        """CREATE TABLE IF NOT EXISTS user_settings (
+               key        TEXT PRIMARY KEY,
+               value      TEXT NOT NULL DEFAULT '{}',
+               updated_at TEXT NOT NULL
+           )""",
+    ]),
 ]
 
 _SQLITE_MIGRATIONS = [
@@ -102,6 +109,13 @@ _SQLITE_MIGRATIONS = [
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             tickers    TEXT NOT NULL DEFAULT '[]'
+        );
+    """),
+    (2, """
+        CREATE TABLE IF NOT EXISTS user_settings (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT NOT NULL
         );
     """),
 ]
@@ -385,6 +399,54 @@ def delete_val_list(lid: int) -> None:
         cur.close()
     else:
         conn.execute("DELETE FROM valuation_lists WHERE id=?", (lid,))
+    conn.commit()
+    conn.close()
+
+
+# ── User settings (key-value) ────────────────────────────────────────────────
+
+def get_setting(key: str) -> dict:
+    """Return the JSON value for *key*, or {} if not found."""
+    conn = get_conn()
+    if _USE_PG:
+        import psycopg2.extras
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT value FROM user_settings WHERE key=%s", (key,))
+        row = cur.fetchone()
+        cur.close()
+    else:
+        row = conn.execute(
+            "SELECT value FROM user_settings WHERE key=?", (key,)
+        ).fetchone()
+    conn.close()
+    if not row:
+        return {}
+    try:
+        return json.loads(row["value"])
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def save_setting(key: str, value: dict) -> None:
+    """Upsert a JSON value for *key*."""
+    conn = get_conn()
+    now = _utcnow()
+    if _USE_PG:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO user_settings (key, value, updated_at)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (key) DO UPDATE
+               SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at""",
+            (key, json.dumps(value), now),
+        )
+        cur.close()
+    else:
+        conn.execute(
+            """INSERT INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
+            (key, json.dumps(value), now),
+        )
     conn.commit()
     conn.close()
 

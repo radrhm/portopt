@@ -90,6 +90,20 @@ def delete_list(lid):
     return jsonify({"ok": True})
 
 
+@valuation_bp.route("/api/valuation/settings", methods=["GET"])
+def get_val_settings():
+    from db import get_setting
+    return jsonify(get_setting("valuation_model_settings"))
+
+
+@valuation_bp.route("/api/valuation/settings", methods=["PUT"])
+def save_val_settings():
+    from db import save_setting
+    body = request.get_json(silent=True) or {}
+    save_setting("valuation_model_settings", body)
+    return jsonify({"ok": True})
+
+
 @valuation_bp.route("/api/valuation/lists/<int:lid>/to-portfolio", methods=["POST"])
 def convert_list_to_portfolio(lid):
     from db import get_val_list, save_portfolio

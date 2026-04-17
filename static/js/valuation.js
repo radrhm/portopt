@@ -1551,18 +1551,19 @@ function _renderModelCharts(tk, d) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function valInit() {
-  _loadModelSettings();
-  try {
-    const res = await fetch('/api/valuation/lists');
-    if (res.ok) {
-      const rows = await res.json();
-      _vWs = (rows || []).map(_wsNormalize);
-    }
-  } catch (_) {}
+  // Load settings and workspaces in parallel
+  const [, wsRes] = await Promise.allSettled([
+    _loadModelSettings(),
+    fetch('/api/valuation/lists').then(r => r.ok ? r.json() : []),
+  ]);
+  const rows = wsRes.status === 'fulfilled' ? (wsRes.value || []) : [];
+  _vWs = rows.map(_wsNormalize);
+
+  valApplyModelSettings();
+
   if (!_vWs.length) {
     await valNewWorkspace('Workspace 1');
   } else {
-    // Activate the most recently updated workspace (first in DESC-sorted list)
     await _activateWorkspace(_vWs[0].id, true);
   }
   _renderWsTabs();
@@ -1874,7 +1875,6 @@ function _escHtml(s) {
 // MODEL SELECTION SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const _VAL_SETTINGS_KEY = 'portopt_val_settings_v1';
 const _VAL_MODEL_LIST = [
   { id: 'dcf',    label: 'Discounted Cash Flow (DCF)', cat: 'Cash Flow' },
   { id: 'rdcf',   label: 'Reverse DCF (Implied Growth)', cat: 'Cash Flow' },
@@ -1890,19 +1890,27 @@ const _VAL_MODEL_LIST = [
 ];
 
 let _vModelSettings = Object.fromEntries(_VAL_MODEL_LIST.map(m => [m.id, true]));
+let _vSettingsSaveTimer = null;
 
-function _loadModelSettings() {
+async function _loadModelSettings() {
   try {
-    const raw = localStorage.getItem(_VAL_SETTINGS_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw);
+    const res = await fetch('/api/valuation/settings');
+    if (res.ok) {
+      const saved = await res.json();
       _VAL_MODEL_LIST.forEach(m => { if (m.id in saved) _vModelSettings[m.id] = !!saved[m.id]; });
     }
   } catch(_) {}
 }
 
 function _saveModelSettings() {
-  try { localStorage.setItem(_VAL_SETTINGS_KEY, JSON.stringify(_vModelSettings)); } catch(_) {}
+  clearTimeout(_vSettingsSaveTimer);
+  _vSettingsSaveTimer = setTimeout(() => {
+    fetch('/api/valuation/settings', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(_vModelSettings),
+    }).catch(() => {});
+  }, 500);
 }
 
 function valApplyModelSettings() {
