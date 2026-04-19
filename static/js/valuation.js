@@ -407,12 +407,6 @@ function _renderStockPanel(ticker, d) {
 }
 
 function _stockHeaderHTML(d) {
-  const upChip = d.beta > 1.2
-    ? `<span class="val-chip red">\u03b2 ${d.beta} High</span>`
-    : d.beta < 0.8
-    ? `<span class="val-chip green">\u03b2 ${d.beta} Low</span>`
-    : `<span class="val-chip">\u03b2 ${d.beta}</span>`;
-
   // 1Y price change
   const ph = d.price_history || [];
   let changeHTML = '';
@@ -429,21 +423,24 @@ function _stockHeaderHTML(d) {
   return `
   <div class="val-stock-header-top">
     <div class="val-stock-info">
-      <div style="display:flex;align-items:baseline;gap:10px;">
+      <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
         <span class="val-stock-ticker">${d.ticker}</span>
         <span class="val-stock-name">${d.name}</span>
-        <span style="font-size:11px;color:var(--muted);">${d.currency}</span>
+        <span style="font-size:12px;color:var(--muted);padding-bottom:6px;">${d.currency}</span>
       </div>
-      <div class="val-stock-chips" style="margin-top:8px;">
-        <span class="val-chip">${d.sector}</span>
-        <span class="val-chip">${d.industry}</span>
-        <span class="val-chip">Mkt Cap ${d.market_cap_fmt}</span>
-        ${upChip}
-        ${d.pe_ttm ? `<span class="val-chip">P/E ${d.pe_ttm}\u00d7</span>` : ''}
-        ${d.ev_ebitda_current ? `<span class="val-chip">EV/EBITDA ${d.ev_ebitda_current}\u00d7</span>` : ''}
-        ${d.dividend_annual ? `<span class="val-chip green">Div $${d.dividend_annual} (${d.dividend_yield.toFixed(1)}%)</span>` : '<span class="val-chip">No Dividend</span>'}
-        ${_fScoreChipHTML(d)}
-        ${_zScoreChipHTML(d)}
+      <div class="val-stock-chips">
+        ${_ultimateScoreHTML(d)}
+        ${_tagHTML('Sector', d.sector,   `Industry group: ${d.industry}. Used to calibrate fair-value multiples (target P/E, EV/EBITDA, P/S defaults).`)}
+        ${_tagHTML('Mkt Cap', d.market_cap_fmt, 'Market capitalization = current price × shares outstanding. Proxy for company size and liquidity.')}
+        ${_betaTag(d)}
+        ${_peTag(d)}
+        ${_psTag(d)}
+        ${_evEbitdaTag(d)}
+        ${_evEbitTag(d)}
+        ${_divTag(d)}
+        ${_fScoreTag(d)}
+        ${_zScoreTag(d)}
+        ${_bestMultipleTag(d)}
       </div>
       ${truncated ? `<div class="val-biz-summary">${truncated}</div>` : ''}
     </div>
@@ -457,20 +454,146 @@ function _stockHeaderHTML(d) {
   </div>`;
 }
 
-function _fScoreChipHTML(d) {
+// ── Header badge helpers ────────────────────────────────────────────
+
+function _tagHTML(key, value, tip, cls='') {
+  if (value === undefined || value === null || value === '' || value === '—') return '';
+  return `<span class="val-tag ${cls}" data-tip="${_escAttr(tip)}">
+    <span class="val-tag-k">${key}</span>
+    <span class="val-tag-v">${value}</span>
+  </span>`;
+}
+
+function _escAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _betaTag(d) {
+  if (d.beta === undefined || d.beta === null) return '';
+  const cls = d.beta > 1.3 ? 'red' : (d.beta < 0.8 ? 'green' : '');
+  const flavor = d.beta > 1.3 ? 'More volatile than market — swings harder both ways.'
+               : d.beta < 0.8 ? 'Less volatile than market — defensive profile.'
+               : 'Moves roughly in line with the broad market.';
+  return _tagHTML('β', d.beta.toFixed(2),
+    `Beta = stock's historical sensitivity to market returns.\n` +
+    `β = 1.0 → moves with market. β > 1 → amplifies. β < 1 → dampens.\n\n${flavor}\n\n` +
+    `Used to compute cost of equity (WACC = Rf + β × ERP).`, cls);
+}
+
+function _peTag(d) {
+  if (!d.pe_ttm || d.pe_ttm <= 0) return _tagHTML('P/E', 'n/a',
+    'P/E is not meaningful (negative or zero earnings). Use EV/Sales or P/B for loss-making companies.', 'gold');
+  const vs = d.sector_pe ? `\n\nSector benchmark: ~${d.sector_pe}×. ` +
+    (d.pe_ttm > d.sector_pe * 1.15 ? 'Trading at a premium to peers.' :
+     d.pe_ttm < d.sector_pe * 0.85 ? 'Trading at a discount to peers.' : 'In line with peers.') : '';
+  const cls = d.sector_pe && d.pe_ttm < d.sector_pe * 0.85 ? 'green' :
+              d.sector_pe && d.pe_ttm > d.sector_pe * 1.15 ? 'red' : '';
+  return _tagHTML('P/E', `${d.pe_ttm}×`,
+    `Price / trailing 12-month earnings. How many years of current profit you pay for the stock.${vs}\n\n` +
+    `Low P/E can mean "cheap" OR "stagnant". High P/E means growth expectations baked in.`, cls);
+}
+
+function _psTag(d) {
+  if (!d.ps_current) return '';
+  const vs = d.sector_ps ? `\nSector benchmark: ~${d.sector_ps}×.` : '';
+  return _tagHTML('P/S', `${d.ps_current}×`,
+    `Price / Sales. Market cap divided by revenue.\n` +
+    `Useful when earnings are negative (high-growth tech, biotech).${vs}\n\n` +
+    `Pitfall: ignores profitability — a high P/S on thin margins can be dangerous.`);
+}
+
+function _evEbitdaTag(d) {
+  if (!d.ev_ebitda_current) return '';
+  const vs = d.sector_ev ? `\nSector benchmark: ~${d.sector_ev}×.` : '';
+  const cls = d.sector_ev && d.ev_ebitda_current < d.sector_ev * 0.85 ? 'green' :
+              d.sector_ev && d.ev_ebitda_current > d.sector_ev * 1.15 ? 'red' : '';
+  return _tagHTML('EV/EBITDA', `${d.ev_ebitda_current}×`,
+    `Enterprise Value / EBITDA. Capital-structure neutral — better than P/E for comparing leveraged firms.${vs}\n\n` +
+    `Pitfall: strips out D&A and capex — understates cost for capital-intensive businesses.`, cls);
+}
+
+function _evEbitTag(d) {
+  if (!d.ev_ebit_current) return '';
+  return _tagHTML('EV/EBIT', `${d.ev_ebit_current}×`,
+    `Enterprise Value / EBIT. Like EV/EBITDA but includes depreciation — penalises capex-heavy firms ` +
+    `(utilities, industrials) appropriately. Closer to a "true economic earnings" multiple.`);
+}
+
+function _divTag(d) {
+  if (!d.dividend_annual || d.dividend_annual <= 0) {
+    return _tagHTML('Div', 'None', 'Company pays no dividend. DDM model is not applicable.', 'gold');
+  }
+  return _tagHTML('Div Yield', `${d.dividend_yield.toFixed(2)}%`,
+    `Annual dividend $${d.dividend_annual}/share → ${d.dividend_yield.toFixed(2)}% yield at current price.\n\n` +
+    `Check payout ratio & FCF coverage: unsustainably high yields often precede cuts.`, 'green');
+}
+
+function _fScoreTag(d) {
   if (d.f_score === undefined || d.f_score === null) return '';
   const f = d.f_score;
   const cls = f >= 7 ? 'green' : (f <= 3 ? 'red' : 'gold');
-  const label = f >= 7 ? 'Strong' : (f <= 3 ? 'Weak' : 'Mixed');
-  return `<span class="val-chip ${cls}" title="Piotroski F-Score: 9-point quality test (profitability, leverage, efficiency)">F-Score ${f}/9 ${label}</span>`;
+  const grade = f >= 7 ? 'Strong' : (f <= 3 ? 'Weak' : 'Mixed');
+  return _tagHTML('F-Score', `${f}/9 · ${grade}`,
+    `Piotroski F-Score — 9 binary tests on fundamentals:\n` +
+    `• Profitability (NI>0, ROA>0, OCF>0, OCF>NI)\n` +
+    `• Leverage/liquidity (debt↓, current ratio↑, no dilution)\n` +
+    `• Efficiency (gross margin↑, asset turnover↑)\n\n` +
+    `≥7 = high quality · 4–6 mixed · ≤3 weak.`, cls);
 }
 
-function _zScoreChipHTML(d) {
+function _zScoreTag(d) {
   if (d.z_score === undefined || d.z_score === null) return '';
   const band = d.z_score_band || 'grey';
   const cls = band === 'safe' ? 'green' : (band === 'distress' ? 'red' : 'gold');
   const label = band === 'safe' ? 'Safe' : (band === 'distress' ? 'Distress' : 'Grey');
-  return `<span class="val-chip ${cls}" title="Altman Z-Score: bankruptcy risk model. >2.99 safe, 1.81-2.99 grey, <1.81 distress">Z ${d.z_score} ${label}</span>`;
+  return _tagHTML('Z-Score', `${d.z_score} · ${label}`,
+    `Altman Z-Score — predicts bankruptcy within 2 years:\n` +
+    `Z = 1.2·WC/TA + 1.4·RE/TA + 3.3·EBIT/TA + 0.6·MV/TL + 1.0·Sales/TA\n\n` +
+    `> 2.99 = Safe · 1.81–2.99 = Grey zone · < 1.81 = Distress.\n\n` +
+    `Calibrated for manufacturers — less reliable for banks / asset-light tech.`, cls);
+}
+
+function _bestMultipleTag(d) {
+  if (!d.best_multiple || !d.correlations) return '';
+  const name = {pe:'P/E', ps:'P/S', ev_ebitda:'EV/EBITDA', ev_ebit:'EV/EBIT'}[d.best_multiple] || d.best_multiple;
+  const corr = d.correlations[d.best_multiple];
+  if (corr === null || corr === undefined) return '';
+  const direction = corr >= 0 ? 'positive' : 'negative';
+  return _tagHTML('Best-Fit Ratio', `${name} · r=${corr.toFixed(2)}`,
+    `Among the historical multiples, ${name} has the strongest ${direction} correlation ` +
+    `with the stock price over time (Pearson r = ${corr.toFixed(2)}).\n\n` +
+    `This is the most reliable valuation lens for this particular stock — the market has historically ` +
+    `priced it off this multiple more than the others.`, 'violet');
+}
+
+function _ultimateScoreHTML(d) {
+  if (d.composite_score === null || d.composite_score === undefined) return '';
+  const s = d.composite_score, band = d.composite_band || 'fair';
+  const label = {excellent:'Excellent', good:'Good', fair:'Fair', weak:'Weak'}[band] || 'Fair';
+  const C = 2 * Math.PI * 14;   // circumference
+  const dash = (s / 100) * C;
+  const parts = d.composite_parts || {};
+  const tip = `Ultimate Quality Score (0–100) — blended health & valuation signal.\n\n` +
+    `• Fundamentals (F-Score, 40 pts): ${(parts.fundamentals ?? 0).toFixed(1)}\n` +
+    `• Solvency (Z-Score, 25 pts): ${(parts.solvency ?? 0).toFixed(1)}\n` +
+    `• Valuation (P/E vs history, 20 pts): ${(parts.valuation ?? 0).toFixed(1)}\n` +
+    `• Growth (earnings growth, 15 pts): ${(parts.growth ?? 0).toFixed(1)}\n\n` +
+    `≥75 Excellent · 55–74 Good · 40–54 Fair · <40 Weak.\n` +
+    `This is a heuristic — always verify with context.`;
+  return `<span class="val-ultimate ${band}" data-tip="${_escAttr(tip)}">
+    <span class="val-ultimate-ring">
+      <svg viewBox="0 0 32 32">
+        <circle class="val-ultimate-ring-bg" cx="16" cy="16" r="14" fill="none" stroke-width="3"/>
+        <circle class="val-ultimate-ring-fg" cx="16" cy="16" r="14" fill="none" stroke-width="3"
+          stroke-dasharray="${dash} ${C}" stroke-linecap="round"/>
+      </svg>
+      <span class="val-ultimate-score-txt">${Math.round(s)}</span>
+    </span>
+    <span class="val-ultimate-label">
+      <span class="k">Ultimate Score</span>
+      <span class="v">${label}</span>
+    </span>
+  </span>`;
 }
 
 // ── Categories & model HTML ───────────────────────────────────────────────────
@@ -546,13 +669,252 @@ function _cardWrap(id, tk, title, subtitle, bodyHTML) {
     <div class="val-card-body">
       ${bodyHTML}
       <div class="val-updown neutral" id="ud-${tk}-${id}"></div>
-      <button class="val-workings-btn" onclick="toggleWorkings('${tk}','${id}')">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg>
-        Show working
-      </button>
+      <div class="val-card-actions">
+        <button class="val-workings-btn" onclick="toggleWorkings('${tk}','${id}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M12 2v20"/></svg>
+          Show working
+        </button>
+        <button class="val-workings-btn" onclick="toggleExplainer('${tk}','${id}')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          About this model
+        </button>
+      </div>
       <div class="val-workings-panel" id="wp-${tk}-${id}"></div>
+      <div class="val-explainer-panel" id="ex-${tk}-${id}">${_modelExplainerHTML(id)}</div>
     </div>
   </div>`;
+}
+
+// ── Model Explainer content ─────────────────────────────────────────────
+// For each model: formula, key assumptions, what to care about, pitfalls.
+const _MODEL_EXPLAINERS = {
+  dcf: {
+    formula: "V<sub>equity</sub> = Σ FCFₜ / (1+WACC)ᵗ + TV / (1+WACC)<sup>10</sup>,  where TV = FCF₁₀·(1+g) / (WACC−g)",
+    assumptions: [
+      "Two-stage growth: explicit high-growth years 1–5, slower years 6–10, then perpetual terminal growth.",
+      "FCF = Operating Cash Flow + CapEx (capex is negative). Represents cash available to all capital providers.",
+      "WACC is used as the discount rate — assumes debt and equity holders are compensated uniformly.",
+      "Terminal growth (2–3%) must stay below long-run WACC, and realistically below long-run GDP growth.",
+    ],
+    care: [
+      "Use a normalized FCF — exclude one-off items (asset sales, tax refunds, legal settlements).",
+      "Check historical FCF growth (shown in the table) to sanity-check your Stage-1 growth input.",
+      "Margin of safety: even 10–20% off can protect you from parameter misjudgement.",
+    ],
+    pitfalls: [
+      "80%+ of the DCF value typically comes from the terminal value — this model is highly sensitive to WACC and terminal g.",
+      "Companies with volatile or negative FCF (early-stage, cyclical, turnaround) break the model's stability.",
+      "Garbage-in-garbage-out: small tweaks in WACC (±1%) can move value ±20%. Always run sensitivity analysis.",
+    ],
+  },
+  rdcf: {
+    formula: "Solve for g such that: Price = Σ FCF·(1+g)ᵗ / (1+WACC)ᵗ + TV discounted",
+    assumptions: [
+      "Inverts the DCF — instead of assuming growth and solving for value, we assume value (current price) and solve for growth.",
+      "Uses the same WACC and terminal growth inputs as the standard DCF.",
+      "Output = the annual FCF growth rate over years 1–5 that the market is implicitly pricing in.",
+    ],
+    care: [
+      "Compare the implied growth to consensus analyst estimates and historical growth.",
+      "If implied g exceeds 20%/year, the stock is 'priced for perfection' — any stumble causes severe drawdown.",
+      "If implied g is negative or near-zero, the market is pessimistic — potentially a hidden value opportunity.",
+    ],
+    pitfalls: [
+      "Extremely sensitive to WACC — the implied growth is only meaningful if the discount rate is realistic.",
+      "Doesn't account for capital structure changes, share buybacks, or new equity issuance.",
+      "The solution assumes FCF stability — unstable businesses yield misleading implied growth rates.",
+    ],
+  },
+  epv: {
+    formula: "EPV = (EBIT · (1−tax)) / WACC,   Equity = EPV − Net Debt,   Per Share = Equity / Shares",
+    assumptions: [
+      "Assumes zero growth — values the company on its current normalized earnings power alone.",
+      "EBIT should be normalized (average 5–7 years, ex one-offs) to smooth cyclicality.",
+      "Deducts net debt to get equity value; divides by shares for per-share price.",
+    ],
+    care: [
+      "Most useful for mature, stable businesses (consumer staples, utilities, industrials with moat).",
+      "Compare EPV to DCF: if EPV ≈ DCF, the market is paying mostly for current earnings, not growth.",
+      "Gap between EPV and DCF = value attributed to growth — 'growth premium'.",
+    ],
+    pitfalls: [
+      "Ignores growth entirely — will systematically undervalue high-growth companies.",
+      "Sensitive to WACC choice, but less so than DCF (no terminal value).",
+      "A single bad year's EBIT can distort the result — always normalize.",
+    ],
+  },
+  ddm: {
+    formula: "P = D₁ / (r − g),   where D₁ = next-year dividend, r = required return, g = perpetual growth",
+    assumptions: [
+      "Gordon Growth Model: assumes a constant perpetual dividend growth rate.",
+      "Requires r > g — the required return must exceed the dividend growth rate, or the formula diverges.",
+      "Best for stable dividend payers with decades of consistent history.",
+    ],
+    care: [
+      "Check payout ratio and FCF coverage — sustainable dividends grow out of sustainable earnings.",
+      "Use a growth rate grounded in history; rarely >6–8% sustainably.",
+      "For non-dividend-paying stocks, DDM is simply not applicable.",
+    ],
+    pitfalls: [
+      "Extremely sensitive near r ≈ g — small tweaks blow up the value.",
+      "Dividend policy can change (cuts, suspensions) — past stability doesn't guarantee future.",
+      "Ignores buybacks, which are effectively equivalent to dividends for shareholder returns.",
+    ],
+  },
+  pe: {
+    formula: "Fair Price = EPS × Target P/E",
+    assumptions: [
+      "The target multiple reflects what similar-quality, similar-growth companies trade at.",
+      "Assumes earnings are clean (ex non-recurring items) and representative of ongoing business.",
+      "Calibrated against sector median and the stock's own historical range (see band above).",
+    ],
+    care: [
+      "Compare to both sector P/E AND the stock's own historical percentile — context matters.",
+      "Use forward EPS for forward-looking valuation; TTM EPS for current snapshot.",
+      "Quality counts: a high-moat company deserves a higher P/E than an average one.",
+    ],
+    pitfalls: [
+      "Works poorly for loss-making companies (no meaningful P/E) or cyclicals at peak earnings.",
+      "Accounting differences (one-offs, tax adjustments) distort EPS and P/E.",
+      "A low P/E can be a value trap — always ask 'why is the market pricing it this cheap?'",
+    ],
+  },
+  evda: {
+    formula: "Fair EV = EBITDA × Multiple,   Equity = Fair EV − Net Debt,   Per Share = Equity / Shares",
+    assumptions: [
+      "EV/EBITDA is capital-structure-neutral — compares companies with different debt levels fairly.",
+      "EBITDA = Earnings before Interest, Tax, Depreciation, Amortization — a rough cash-flow proxy.",
+      "Target multiple based on sector median adjusted for growth/quality.",
+    ],
+    care: [
+      "Better than P/E for comparing leveraged firms (LBOs, private equity targets).",
+      "Check against the stock's historical EV/EBITDA range — percentile band shown above.",
+      "Cross-reference with EV/EBIT — if gap is large, the company is capital-intensive (high depreciation).",
+    ],
+    pitfalls: [
+      "'EBITDA' strips out real costs — D&A reflects capex you'll have to repeat. Avoid for capex-heavy industries.",
+      "Doesn't include working-capital changes — EBITDA ≠ Cash.",
+      "Charlie Munger: 'whenever I hear EBITDA, I substitute bullshit earnings'. Use alongside FCF.",
+    ],
+  },
+  eveb: {
+    formula: "Fair EV = EBIT × Multiple,   Equity = Fair EV − Net Debt,   Per Share = Equity / Shares",
+    assumptions: [
+      "Like EV/EBITDA, but uses EBIT — includes depreciation as a real operating cost.",
+      "More conservative than EV/EBITDA for capital-intensive businesses.",
+      "Target multiple ~20% below EV/EBITDA (since EBIT < EBITDA).",
+    ],
+    care: [
+      "Preferred over EV/EBITDA when comparing asset-heavy companies (manufacturers, telecoms, utilities).",
+      "Join Greenblatt's 'Magic Formula' approach: Earnings Yield = EBIT / EV.",
+      "A high EV/EBIT with high ROIC often signals a moat — quality earnings.",
+    ],
+    pitfalls: [
+      "EBIT is affected by depreciation methods, which vary across regions and accounting standards.",
+      "Still ignores interest expense, so a highly leveraged firm may look cheaper than it is on equity basis.",
+      "One-off impairments can crush a single year's EBIT — normalize before using.",
+    ],
+  },
+  ps: {
+    formula: "Fair Market Cap = Revenue × Target P/S,   Per Share = Fair Market Cap / Shares",
+    assumptions: [
+      "Revenue is harder to manipulate than earnings — P/S is useful for unprofitable growth companies.",
+      "Assumes the company's sector has a stable 'normal' sales multiple.",
+      "Target P/S set around historical/sector median, not peak.",
+    ],
+    care: [
+      "Works well for SaaS, biotech, early-stage growth companies with scalable revenue.",
+      "Pair with gross margin — high P/S only justified by durable high-margin revenue.",
+      "Especially powerful combined with Rule of 40 (growth + margin ≥ 40%).",
+    ],
+    pitfalls: [
+      "Ignores profitability — $1 of revenue at 5% margin ≠ $1 at 80% margin.",
+      "A high P/S on shrinking revenue is a warning sign.",
+      "Can be inflated by low-quality revenue (e.g. gross billings vs net).",
+    ],
+  },
+  peg: {
+    formula: "Fair P/E = Growth Rate × Target PEG,   Fair Price = EPS × Fair P/E",
+    assumptions: [
+      "Peter Lynch's rule of thumb: a P/E equal to the earnings growth rate is 'fairly valued' (PEG = 1).",
+      "Assumes earnings growth persists over the medium term (3–5 years).",
+      "Target PEG = 1.0 typically; lower = cheaper, higher = expensive.",
+    ],
+    care: [
+      "Best for mid-cap growth stocks with consistent double-digit earnings growth.",
+      "Cross-check growth rate with historical and analyst estimates — don't trust a single year.",
+      "Adjust PEG by quality: a moat or ROIC > 15% justifies a PEG slightly above 1.",
+    ],
+    pitfalls: [
+      "Meaningless when earnings are zero or negative.",
+      "Very sensitive to the growth input — a small change in g shifts fair value materially.",
+      "Ignores quality of growth (organic vs acquired) and return on invested capital.",
+    ],
+  },
+  graham: {
+    formula: "Graham Number = √(22.5 × EPS × Book Value per Share)",
+    assumptions: [
+      "Benjamin Graham's conservative 'max price' for a defensive investor: P/E ≤ 15 and P/B ≤ 1.5, so P/E × P/B ≤ 22.5.",
+      "Requires positive EPS and positive book value.",
+      "Designed for stable, mature, profitable companies.",
+    ],
+    care: [
+      "Treat the Graham Number as an upper bound of a conservative fair value, not a target.",
+      "Pair with current ratio ≥ 2 and consistent earnings for Graham's full defensive screen.",
+      "Works best for industrials, financials, and tangible-asset-heavy businesses.",
+    ],
+    pitfalls: [
+      "Fails for asset-light tech/software businesses where book value is essentially zero.",
+      "Doesn't account for growth — will reject many high-quality compounders.",
+      "Accounting book value ≠ economic value — intangibles and goodwill distort P/B.",
+    ],
+  },
+  ncav: {
+    formula: "NCAV per Share = (Current Assets − Total Liabilities) / Shares Outstanding",
+    assumptions: [
+      "Deep-value Graham floor: the company's near-liquidation value.",
+      "Current Assets (cash, receivables, inventory) are assumed to cover ALL liabilities (current + LT).",
+      "A stock trading below 2/3 of NCAV is Graham's 'net-net' — a classic deep-value buy signal.",
+    ],
+    care: [
+      "Most applicable to distressed micro-caps and cyclical bottoms.",
+      "Pair with share-issuance screen (Piotroski F-Score tests this) to avoid dilution traps.",
+      "Check receivables/inventory quality — bloated, aging AR/inventory may not be recoverable at face value.",
+    ],
+    pitfalls: [
+      "Assumes assets can be liquidated at book value — rarely true for inventory (discounted 20–50%) or AR.",
+      "Value traps: stocks stay below NCAV for years while losses compound.",
+      "Extremely rare among large/mid caps — mostly a micro-cap tool.",
+    ],
+  },
+};
+
+function _modelExplainerHTML(id) {
+  const e = _MODEL_EXPLAINERS[id];
+  if (!e) return '';
+  const list = (items) => items.map(i => `<li>${i}</li>`).join('');
+  return `
+    <div class="val-ex-section">
+      <div class="val-ex-h">Formula</div>
+      <div class="val-ex-formula">${e.formula}</div>
+    </div>
+    <div class="val-ex-section">
+      <div class="val-ex-h"><span class="val-ex-dot blue"></span>Key Assumptions</div>
+      <ul class="val-ex-list">${list(e.assumptions)}</ul>
+    </div>
+    <div class="val-ex-section">
+      <div class="val-ex-h"><span class="val-ex-dot green"></span>Things to Care About</div>
+      <ul class="val-ex-list">${list(e.care)}</ul>
+    </div>
+    <div class="val-ex-section">
+      <div class="val-ex-h"><span class="val-ex-dot red"></span>Pitfalls &amp; Watch-outs</div>
+      <ul class="val-ex-list">${list(e.pitfalls)}</ul>
+    </div>`;
+}
+
+function toggleExplainer(tk, id) {
+  const el = document.getElementById(`ex-${tk}-${id}`);
+  if (el) el.classList.toggle('open');
 }
 
 function _inp(id, label, val, hint, step='0.01', min='', max='') {
@@ -570,14 +932,41 @@ function _inp(id, label, val, hint, step='0.01', min='', max='') {
 function _dcfCardHTML(tk, d) {
   const g1  = Math.min(d.earnings_growth_pct, 40).toFixed(1);
   const g2  = Math.min(d.earnings_growth_pct * 0.6, 25).toFixed(1);
-  const fcfData = d.historical_fcf.slice(0, 4);  // last 4 years
+  const fcfData = d.historical_fcf.slice(0, 4);  // last 4 years (newest→oldest)
+
+  // FCF YoY row — show growth rate (%); the oldest row has no prior year so blank
+  const fmtYoY = (r) => {
+    if (r.yoy_pct === undefined || r.yoy_pct === null) return '<span class="val-muted">—</span>';
+    const v = r.yoy_pct;
+    const cls = v >= 0 ? 'pos' : 'neg';
+    return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+  };
+
+  // 4-year FCF CAGR summary (if we have 4+ rows)
+  let cagrHTML = '';
+  if (fcfData.length >= 3) {
+    const newest = fcfData[0].fcf_m;
+    const oldest = fcfData[fcfData.length - 1].fcf_m;
+    const yrs    = fcfData.length - 1;
+    if (oldest > 0 && newest > 0) {
+      const cagr = (Math.pow(newest / oldest, 1 / yrs) - 1) * 100;
+      const cls = cagr >= 0 ? 'pos' : 'neg';
+      cagrHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+        <strong>${yrs}-yr FCF CAGR:</strong> <span class="${cls}">${cagr >= 0 ? '+' : ''}${cagr.toFixed(1)}%/yr</span>
+        · Historical growth feeds your Stage-1 & Stage-2 assumptions below.
+      </div>`;
+    }
+  }
+
   const fcfHistory = fcfData.length
-    ? `<table class="val-fcf-table">
-        <thead><tr><th>Year</th><th>Op. Cash Flow ($M)</th><th>CapEx ($M)</th><th>FCF ($M)</th></tr></thead>
+    ? `${cagrHTML}
+       <table class="val-fcf-table">
+        <thead><tr><th>Year</th><th>Op. Cash Flow ($M)</th><th>CapEx ($M)</th><th>FCF ($M)</th><th>YoY Growth</th></tr></thead>
         <tbody>${fcfData.map(r => `
           <tr><td>${r.year}</td><td>${r.op_cf_m.toLocaleString()}</td>
           <td class="neg">${r.capex_m.toLocaleString()}</td>
-          <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td></tr>`).join('')}
+          <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td>
+          <td>${fmtYoY(r)}</td></tr>`).join('')}
         </tbody></table>`
     : `<div class="val-note" style="margin-bottom:8px;">No historical cash flow data available.</div>`;
 
@@ -1256,6 +1645,68 @@ function _meanLine(pts, valKey, color) {
   };
 }
 
+// Dual-axis layout: ratio on left (y1), price on right (y2).
+function _mLayoutDual(yTitle, corr, highlight) {
+  const base = _mLayout(yTitle, true);
+  base.margin = {t: 22, r: 48, b: 32, l: 46};
+  base.yaxis2 = {
+    gridcolor: 'transparent',
+    zerolinewidth: 0,
+    fixedrange: true,
+    tickfont: {size: 9, color: '#64748b'},
+    title: {text: 'Price', font: {size: 8, color: '#475569'}},
+    overlaying: 'y',
+    side: 'right',
+  };
+  if (corr !== null && corr !== undefined) {
+    const color = Math.abs(corr) >= 0.7 ? '#10b981'
+                : Math.abs(corr) >= 0.4 ? '#f59e0b'
+                : '#94a3b8';
+    const prefix = highlight ? '★ ' : '';
+    base.annotations = [{
+      xref: 'paper', yref: 'paper', x: 0, y: 1.12, xanchor: 'left',
+      text: `${prefix}Pearson r = <b>${corr.toFixed(2)}</b>`,
+      showarrow: false,
+      font: {size: 10, color: color, family: 'inherit'},
+      bgcolor: 'rgba(0,0,0,0)',
+    }];
+  }
+  return base;
+}
+
+// Dual-axis ratio + price overlay (used for P/E, EV/EBITDA, EV/EBIT, P/S).
+function _renderDualAxisRatio(elId, history, ratioKey, ratioLabel, ratioColor, corr, highlight) {
+  if (!history || history.length < 2) return;
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  const traces = [
+    {
+      type: 'scatter', mode: 'lines+markers',
+      x: history.map(r => r.year),
+      y: history.map(r => r[ratioKey]),
+      line: {color: ratioColor, width: 2.5},
+      marker: {size: 5, color: ratioColor},
+      name: ratioLabel,
+      yaxis: 'y',
+      hovertemplate: `%{x}: ${ratioLabel} %{y:.2f}×<extra></extra>`,
+    },
+    {
+      type: 'scatter', mode: 'lines',
+      x: history.map(r => r.year),
+      y: history.map(r => r.price),
+      line: {color: 'rgba(148,163,184,.7)', width: 2, dash: 'solid'},
+      name: 'Price',
+      yaxis: 'y2',
+      hovertemplate: `%{x}: $%{y:.2f}<extra></extra>`,
+    },
+  ];
+  const ml = _meanLine(history, ratioKey, '#f59e0b');
+  if (ml) { ml.yaxis = 'y'; traces.push(ml); }
+
+  Plotly.react(elId, traces, _mLayoutDual(`${ratioLabel} (×)`, corr, highlight), _mConf);
+}
+
 function _renderSparkline(tk, d) {
   const el = document.getElementById(`val-sparkline-${tk}`);
   const ph = d.price_history || [];
@@ -1417,68 +1868,44 @@ function _renderModelCharts(tk, d) {
     }], _mLayout('Div/Share ($)'), _mConf);
   }
 
-  // ── P/E: historical TTM P/E line + mean ───────────────────────────────
+  // ── P/E: dual-axis ratio + price overlay ──────────────────────────────
+  const corrs = d.correlations || {};
+  const best   = d.best_multiple;
   const peH = d.pe_history || [];
-  if (peH.length >= 2 && document.getElementById(`mchart-${tk}-pe`)) {
-    const traces = [
-      {
-        type: 'scatter', mode: 'lines+markers',
-        x: peH.map(r => r.year), y: peH.map(r => r.pe),
-        line: {color: '#6366f1', width: 2},
-        marker: {size: 5, color: '#6366f1'},
-        name: 'TTM P/E',
-        hovertemplate: '%{x}: %{y:.1f}×<extra></extra>',
-      },
-    ];
-    const ml = _meanLine(peH, 'pe', '#f59e0b');
-    if (ml) traces.push(ml);
-    Plotly.react(`mchart-${tk}-pe`, traces, _mLayout('P/E (×)', true), _mConf);
+  if (peH.length >= 2) {
+    _renderDualAxisRatio(`mchart-${tk}-pe`, peH, 'pe', 'TTM P/E',
+      '#6366f1', corrs.pe, best === 'pe');
   }
 
-  // ── EV/EBITDA: historical line + mean ────────────────────────────────
+  // ── EV/EBITDA: dual-axis ratio + price overlay ────────────────────────
   const evdaH = d.ev_ebitda_history || [];
-  if (evdaH.length >= 2 && document.getElementById(`mchart-${tk}-evda`)) {
-    const traces = [
-      {
-        type: 'scatter', mode: 'lines+markers',
-        x: evdaH.map(r => r.year), y: evdaH.map(r => r.ev_ebitda),
-        line: {color: '#10b981', width: 2},
-        marker: {size: 5, color: '#10b981'},
-        name: 'EV/EBITDA',
-        hovertemplate: '%{x}: %{y:.1f}×<extra></extra>',
-      },
-    ];
-    const ml = _meanLine(evdaH, 'ev_ebitda', '#f59e0b');
-    if (ml) traces.push(ml);
-    Plotly.react(`mchart-${tk}-evda`, traces, _mLayout('EV/EBITDA (×)', true), _mConf);
+  if (evdaH.length >= 2) {
+    _renderDualAxisRatio(`mchart-${tk}-evda`, evdaH, 'ev_ebitda', 'EV/EBITDA',
+      '#10b981', corrs.ev_ebitda, best === 'ev_ebitda');
   }
 
-  // ── EV/EBIT: EBITDA bars ──────────────────────────────────────────────
-  const ebitdaH = d.ebitda_annual || [];
-  if (ebitdaH.length >= 2 && document.getElementById(`mchart-${tk}-eveb`)) {
-    Plotly.react(`mchart-${tk}-eveb`, [{
-      type: 'bar', x: ebitdaH.map(r => r.year), y: ebitdaH.map(r => r.ebitda_m),
-      marker: {color: 'rgba(16,185,129,.6)', line: {width: 0}},
-      hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
-    }], _mLayout('EBITDA ($M)'), _mConf);
+  // ── EV/EBIT: dual-axis ratio + price overlay ──────────────────────────
+  const evebH = d.ev_ebit_history || [];
+  if (evebH.length >= 2) {
+    _renderDualAxisRatio(`mchart-${tk}-eveb`, evebH, 'ev_ebit', 'EV/EBIT',
+      '#a78bfa', corrs.ev_ebit, best === 'ev_ebit');
+  } else {
+    // Fallback: EBITDA bars
+    const ebitdaH = d.ebitda_annual || [];
+    if (ebitdaH.length >= 2 && document.getElementById(`mchart-${tk}-eveb`)) {
+      Plotly.react(`mchart-${tk}-eveb`, [{
+        type: 'bar', x: ebitdaH.map(r => r.year), y: ebitdaH.map(r => r.ebitda_m),
+        marker: {color: 'rgba(16,185,129,.6)', line: {width: 0}},
+        hovertemplate: '%{x}: $%{y:.0f}M<extra></extra>',
+      }], _mLayout('EBITDA ($M)'), _mConf);
+    }
   }
 
-  // ── P/S: historical P/S line + mean ──────────────────────────────────
+  // ── P/S: dual-axis ratio + price overlay ──────────────────────────────
   const psH = d.ps_history || [];
-  if (psH.length >= 2 && document.getElementById(`mchart-${tk}-ps`)) {
-    const traces = [
-      {
-        type: 'scatter', mode: 'lines+markers',
-        x: psH.map(r => r.year), y: psH.map(r => r.ps),
-        line: {color: '#06b6d4', width: 2},
-        marker: {size: 5, color: '#06b6d4'},
-        name: 'P/S',
-        hovertemplate: '%{x}: %{y:.2f}×<extra></extra>',
-      },
-    ];
-    const ml = _meanLine(psH, 'ps', '#f59e0b');
-    if (ml) traces.push(ml);
-    Plotly.react(`mchart-${tk}-ps`, traces, _mLayout('P/S (×)', true), _mConf);
+  if (psH.length >= 2) {
+    _renderDualAxisRatio(`mchart-${tk}-ps`, psH, 'ps', 'P/S',
+      '#06b6d4', corrs.ps, best === 'ps');
   }
 
   // ── PEG: EPS history bars ─────────────────────────────────────────────

@@ -209,9 +209,10 @@ def fetch_financials(ticker: str) -> dict:
     scores = _calc_scores(t, mktcap)
 
     # ── Historical annual data for model charts ───────────────────
-    pe_history        = []
+    pe_history        = []     # per-fiscal-year ratio + paired price
     ps_history        = []
     ev_ebitda_history = []
+    ev_ebit_history   = []
     ebit_annual       = []
     ebitda_annual     = []
     revenue_annual    = []
@@ -225,7 +226,7 @@ def fetch_financials(ticker: str) -> dict:
         # Weekly price history for ratio computation
         prices_s = None
         try:
-            _hist = t.history(period='6y', interval='1wk')
+            _hist = t.history(period='10y', interval='1wk')
             if _hist is not None and not _hist.empty:
                 prices_s = _hist['Close']
         except Exception:
@@ -282,32 +283,84 @@ def fetch_financials(ticker: str) -> dict:
                         if hist_px > 0:
                             if eps_yr and eps_yr > 0:
                                 pe_history.append({
-                                    'year': yr,
-                                    'pe': round(hist_px / eps_yr, 1)
+                                    'year':  yr,
+                                    'pe':    round(hist_px / eps_yr, 1),
+                                    'price': round(hist_px, 2),
                                 })
                             if rev and rev > 0:
                                 hist_mc = hist_px * shares
                                 ps_history.append({
-                                    'year': yr,
-                                    'ps': round(hist_mc / rev, 2)
+                                    'year':  yr,
+                                    'ps':    round(hist_mc / rev, 2),
+                                    'price': round(hist_px, 2),
                                 })
-                            if ebitda_v and ebitda_v > 0:
-                                hist_mc  = hist_px * shares
-                                hist_ev  = hist_mc + (total_debt - cash)
-                                if hist_ev > 0:
-                                    ev_ebitda_history.append({
-                                        'year': yr,
-                                        'ev_ebitda': round(hist_ev / ebitda_v, 1)
-                                    })
+                            hist_mc  = hist_px * shares
+                            hist_ev  = hist_mc + (total_debt - cash)
+                            if ebitda_v and ebitda_v > 0 and hist_ev > 0:
+                                ev_ebitda_history.append({
+                                    'year':      yr,
+                                    'ev_ebitda': round(hist_ev / ebitda_v, 1),
+                                    'price':     round(hist_px, 2),
+                                })
+                            if ebit_v and ebit_v > 0 and hist_ev > 0:
+                                ev_ebit_history.append({
+                                    'year':    yr,
+                                    'ev_ebit': round(hist_ev / ebit_v, 1),
+                                    'price':   round(hist_px, 2),
+                                })
                     except Exception:
                         pass
 
         for lst in [revenue_annual, ebit_annual, ebitda_annual, eps_history,
-                    pe_history, ps_history, ev_ebitda_history]:
+                    pe_history, ps_history, ev_ebitda_history, ev_ebit_history]:
             lst.sort(key=lambda x: x['year'])
 
     except Exception as e:
         logger.warning("Could not compute annual history: %s", e)
+
+    # ── FCF YoY growth rates (appended to each row) ────────────────
+    # historical_fcf is sorted newest→oldest
+    try:
+        for i in range(len(historical_fcf) - 1):
+            cur = historical_fcf[i]["fcf_m"]
+            prv = historical_fcf[i + 1]["fcf_m"]
+            if prv and prv != 0:
+                historical_fcf[i]["yoy_pct"] = round(((cur - prv) / abs(prv)) * 100, 1)
+    except Exception:
+        pass
+
+    # ── Ratio ↔ Price correlation coefficients ─────────────────────
+    def _corr(rows, key):
+        try:
+            xs = [r[key] for r in rows if r.get(key) and r.get('price')]
+            ys = [r['price'] for r in rows if r.get(key) and r.get('price')]
+            n = len(xs)
+            if n < 3:
+                return None
+            mx = sum(xs) / n
+            my = sum(ys) / n
+            num = sum((xs[i]-mx)*(ys[i]-my) for i in range(n))
+            dx  = (sum((x-mx)**2 for x in xs)) ** 0.5
+            dy  = (sum((y-my)**2 for y in ys)) ** 0.5
+            if dx == 0 or dy == 0:
+                return None
+            return round(num / (dx * dy), 3)
+        except Exception:
+            return None
+
+    correlations = {
+        "pe":        _corr(pe_history,        "pe"),
+        "ps":        _corr(ps_history,        "ps"),
+        "ev_ebitda": _corr(ev_ebitda_history, "ev_ebitda"),
+        "ev_ebit":   _corr(ev_ebit_history,   "ev_ebit"),
+    }
+
+    # Identify which multiple best explains price (highest |correlation|)
+    best_multiple = None
+    best_corr     = 0.0
+    for k, v in correlations.items():
+        if v is not None and abs(v) > abs(best_corr):
+            best_corr, best_multiple = v, k
 
     # Price sparkline (1 year, weekly)
     price_history = []
@@ -337,6 +390,61 @@ def fetch_financials(ticker: str) -> dict:
             dividend_history = sorted(dividend_history, key=lambda x: x['year'])[-5:]
     except Exception as e:
         logger.warning("Could not parse dividend history: %s", e)
+
+    # ── Composite "Ultimate" quality score (0-100) ────────────────
+    # Blends fundamentals (F-Score), solvency (Z-Score), and valuation signal.
+    composite_score = None
+    composite_band  = None
+    composite_parts = {}
+    try:
+        f = scores.get("f_score")
+        z = scores.get("z_score")
+        z_band = scores.get("z_score_band")
+
+        # F-Score component (0-40 points): 9 tests × ~4.4 pts each
+        f_pts = round((f / 9.0) * 40, 1) if f is not None else 20.0
+
+        # Z-Score component (0-25 points)
+        if z is None:
+            z_pts = 12.5
+        elif z_band == "safe":
+            z_pts = 25.0
+        elif z_band == "grey":
+            z_pts = 15.0
+        else:
+            z_pts = 5.0
+
+        # Valuation component (0-20 points): compare current P/E to historical
+        v_pts = 10.0
+        if pe_history:
+            pes = [r["pe"] for r in pe_history if r.get("pe")]
+            if pes and pe_ttm and pe_ttm > 0:
+                # cheap vs history = high score
+                lo, hi = min(pes), max(pes)
+                if hi > lo:
+                    pctile = max(0.0, min(1.0, (pe_ttm - lo) / (hi - lo)))
+                    v_pts = round((1.0 - pctile) * 20, 1)
+
+        # Growth component (0-15 points)
+        g_pts = max(0.0, min(15.0, (earnings_growth_pct + 5) / 40 * 15))
+
+        composite_score = round(f_pts + z_pts + v_pts + g_pts, 1)
+        composite_parts = {
+            "fundamentals": f_pts,
+            "solvency":     z_pts,
+            "valuation":    v_pts,
+            "growth":       round(g_pts, 1),
+        }
+        if composite_score >= 75:
+            composite_band = "excellent"
+        elif composite_score >= 55:
+            composite_band = "good"
+        elif composite_score >= 40:
+            composite_band = "fair"
+        else:
+            composite_band = "weak"
+    except Exception as e:
+        logger.warning("Could not compute composite score: %s", e)
 
     return {
         # Identity
@@ -406,11 +514,21 @@ def fetch_financials(ticker: str) -> dict:
         "pe_history":         pe_history,
         "ps_history":         ps_history,
         "ev_ebitda_history":  ev_ebitda_history,
+        "ev_ebit_history":    ev_ebit_history,
         "ebit_annual":        ebit_annual,
         "ebitda_annual":      ebitda_annual,
         "revenue_annual":     revenue_annual,
         "eps_history":        eps_history,
         "dividend_history":   dividend_history,
+
+        # Ratio ↔ price correlations
+        "correlations":       correlations,
+        "best_multiple":      best_multiple,
+
+        # Composite "Ultimate" score (0-100)
+        "composite_score":    composite_score,
+        "composite_band":     composite_band,
+        "composite_parts":    composite_parts,
 
         # Business info
         "business_summary": business_summary,

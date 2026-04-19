@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PortOpt — Design Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Core palette — unchanged so existing JS still works */
+  --bg:      #070d1a;
+  --surface: #0c1425;
+  --card:    #0f1d30;
+  --card2:   #112038;
+  --border:  #1e3050;
+  --border2: #263d5e;
+  --text:    #e2e8f0;
+  --muted:   #607898;
+  --muted2:  #8aa4c0;
+
+  /* Accent palette */
+  --blue:    #3b82f6;
+  --cyan:    #06b6d4;
+  --purple:  #8b5cf6;
+  --green:   #10b981;
+  --red:     #ef4444;
+  --gold:    #f59e0b;
+
+  /* Gradients */
+  --grad-brand:  linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  --grad-purple: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  --grad-green:  linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --grad-gold:   linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  --grad-card:   linear-gradient(145deg, rgba(59,130,246,.07) 0%, rgba(6,182,212,.03) 100%);
+
+  --r: 12px;
+  --r-sm: 8px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.03) inset;
+  --shadow-glow-blue: 0 0 28px rgba(59,130,246,.18);
+  --shadow-glow-cyan: 0 0 28px rgba(6,182,212,.18);
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Aurora background ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 10% -10%,  rgba(59,130,246,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 90% 110%,  rgba(139,92,246,.10) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 35% at 60%  80%,  rgba(6,182,212,.07)  0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ── */
+.app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: 52px 40px 1fr;
+  grid-template-columns: 340px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.app-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: rgba(7,13,26,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+/* Thin gradient line under header */
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--grad-brand);
+  opacity: .35;
+}
+
+.logo {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-right: 8px;
+  text-transform: uppercase;
+}
+
+/* Logo icon */
+.logo-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--grad-brand);
+  box-shadow: 0 0 8px rgba(6,182,212,.7);
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.nav-divider {
+  width: 1px; height: 18px;
+  background: var(--border2);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all .15s;
+  background: transparent;
+  color: var(--muted2);
+  letter-spacing: .01em;
+}
+.nav-btn:hover { background: rgba(255,255,255,.05); color: var(--text); }
+.nav-btn.active {
+  background: rgba(59,130,246,.15);
+  color: var(--blue);
+  border: 1px solid rgba(59,130,246,.25);
+}
+.nav-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.status-dot {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--green); font-weight: 500;
+}
+.status-dot::before {
+  content: '';
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+.btn-icon {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.btn-icon:hover { background: rgba(255,255,255,.06); color: var(--text); border-color: var(--border2); }
+
+/* ── Project tabs row ── */
+.tabs-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: rgba(7,13,26,.7);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-row::-webkit-scrollbar { display: none; }
+
+.proj-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 14px;
+  font-size: 12px; font-weight: 500;
+  color: var(--muted);
+  border: none; background: none;
+  cursor: pointer;
+  transition: all .15s;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  min-height: 40px;
+}
+.proj-tab:hover { color: var(--text); }
+.proj-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--blue);
+  font-weight: 600;
+}
+
+.tab-badge {
+  font-size: 10px; font-weight: 600;
+  background: rgba(59,130,246,.18);
+  color: var(--blue);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: .02em;
+}
+
+.tab-add {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  margin: auto 0 auto 4px;
+  border-radius: 6px;
+  border: 1px dashed var(--border2);
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+  background: none;
+}
+.tab-add:hover { border-color: var(--blue); color: var(--blue); background: rgba(59,130,246,.08); }
+
+/* ── Sidebar ── */
+aside {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ── Section card ── */
+.section {
+  background: var(--card);
+  background-image: var(--grad-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle top gradient line on section cards */
+.section::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59,130,246,.3), transparent);
+}
+
+.sec-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.sec-title svg { width: 12px; height: 12px; flex-shrink: 0; }
+.sec-title-icon {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sec-title-icon.blue  { background: rgba(59,130,246,.15); color: var(--blue); }
+.sec-title-icon.cyan  { background: rgba(6,182,212,.15);  color: var(--cyan); }
+.sec-title-icon.gold  { background: rgba(245,158,11,.15); color: var(--gold); }
+
+/* ── Ticker search ── */
+.search-wrap {
+  position: relative;
+}
+.search-wrap svg {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 13px; height: 13px; color: var(--muted); pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  background: rgba(6,18,36,.7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px 8px 30px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border .15s, box-shadow .15s;
+  font-family: inherit;
+}
+.search-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+.search-input::placeholder { color: var(--muted); }
+
+/* ── Stock pill ── */
+.tickers-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ticker-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 8px 4px 10px;
+  background: rgba(59,130,246,.1);
+  border: 1px solid rgba(59,130,246,.22);
+  border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+  color: #93c5fd;
+  letter-spacing: .02em;
+  transition: all .15s;
+}
+.ticker-pill:hover { background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.4); }
+.ticker-pill-remove {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.08);
+  border: none;
+  color: var(--muted2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 9px;
+  transition: all .15s;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.ticker-pill-remove:hover { background: rgba(239,68,68,.25); color: #fca5a5; }
+
+/* ── Form controls ── */
+label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted2);
+  margin-bottom: 4px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.input, select.input {
+  width: 100%;
+  background: rgba(6,18,36,.7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border .15s, box-shadow .15s;
+  font-family: inherit;
+  appearance: none;
+}
+.input:focus, select.input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ── Range slider ── */
+.range-group { display: flex; flex-direction: column; gap: 4px; }
+.range-header { display: flex; justify-content: space-between; }
+.range-value {
+  font-size: 11px; font-weight: 700;
+  color: var(--cyan);
+  background: rgba(6,182,212,.1);
+  border: 1px solid rgba(6,182,212,.2);
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+input[type=range] {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+
+/* ── Method pills ── */
+.method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.method-btn {
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border);
+  background: rgba(6,18,36,.6);
+  color: var(--muted2);
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.method-btn:hover { border-color: var(--border2); color: var(--text); }
+.method-btn.active {
+  background: rgba(59,130,246,.12);
+  border-color: rgba(59,130,246,.35);
+  color: #93c5fd;
+  box-shadow: 0 0 12px rgba(59,130,246,.1);
+}
+.method-btn.active.purple {
+  background: rgba(139,92,246,.12);
+  border-color: rgba(139,92,246,.35);
+  color: #c4b5fd;
+  box-shadow: 0 0 12px rgba(139,92,246,.1);
+}
+.method-label { font-size: 10px; color: var(--muted); font-weight: 500; }
+
+/* ── Optimize button ── */
+.btn-optimize {
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: var(--r);
+  font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  letter-spacing: .02em;
+  position: relative;
+  overflow: hidden;
+  transition: opacity .2s, transform .1s;
+  /* Animated gradient */
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #8b5cf6 100%);
+  background-size: 200% 200%;
+  animation: gradShift 4s ease infinite;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(59,130,246,.35), 0 1px 0 rgba(255,255,255,.15) inset;
+}
+.btn-optimize::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.1) 0%, transparent 100%);
+  pointer-events: none;
+}
+.btn-optimize:hover { opacity: .9; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(59,130,246,.45); }
+.btn-optimize:active { transform: translateY(0); }
+.btn-optimize svg { width: 15px; height: 15px; }
+
+@keyframes gradShift {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+/* ── Main content ── */
+main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ── Results sub-tabs ── */
+.sub-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 3px;
+  width: fit-content;
+}
+.sub-tab {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  border: none; background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex; align-items: center; gap: 5px;
+  letter-spacing: .01em;
+}
+.sub-tab:hover { color: var(--text); }
+.sub-tab.active {
+  background: rgba(59,130,246,.15);
+  color: var(--blue);
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.sub-tab svg { width: 12px; height: 12px; }
+
+/* ── Metric cards ── */
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+.metric-card {
+  background: var(--card);
+  background-image: var(--grad-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: transform .15s, box-shadow .15s;
+}
+.metric-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card), var(--shadow-glow-blue); }
+
+/* Colored left border accent */
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  border-radius: var(--r) 0 0 var(--r);
+}
+.metric-card.blue::before  { background: var(--grad-brand); box-shadow: 2px 0 12px rgba(59,130,246,.3); }
+.metric-card.green::before { background: var(--grad-green); box-shadow: 2px 0 12px rgba(16,185,129,.3); }
+.metric-card.gold::before  { background: var(--grad-gold);  box-shadow: 2px 0 12px rgba(245,158,11,.3); }
+.metric-card.purple::before { background: var(--grad-purple); box-shadow: 2px 0 12px rgba(139,92,246,.3); }
+
+/* Faint bg glow */
+.metric-card.blue::after   { content: ''; position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,.08) 0%, transparent 70%); pointer-events: none; }
+.metric-card.green::after  { content: ''; position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; background: radial-gradient(circle, rgba(16,185,129,.08) 0%, transparent 70%); pointer-events: none; }
+.metric-card.gold::after   { content: ''; position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; background: radial-gradient(circle, rgba(245,158,11,.08) 0%, transparent 70%); pointer-events: none; }
+.metric-card.purple::after { content: ''; position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; background: radial-gradient(circle, rgba(139,92,246,.08) 0%, transparent 70%); pointer-events: none; }
+
+.metric-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+.metric-icon.blue   { background: rgba(59,130,246,.15); color: var(--blue); }
+.metric-icon.green  { background: rgba(16,185,129,.15);  color: var(--green); }
+.metric-icon.gold   { background: rgba(245,158,11,.15);  color: var(--gold); }
+.metric-icon.purple { background: rgba(139,92,246,.15);  color: var(--purple); }
+
+.metric-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--muted2);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-bottom: 4px;
+}
+.metric-val {
+  font-size: 26px; font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.02em;
+}
+.metric-val.blue   { color: var(--blue); }
+.metric-val.green  { color: var(--green); }
+.metric-val.gold   { color: var(--gold); }
+.metric-val.purple { color: var(--purple); }
+
+.metric-sub {
+  font-size: 10px; color: var(--muted); margin-top: 3px;
+  display: flex; align-items: center; gap: 4px;
+}
+.badge-up   { color: var(--green); font-weight: 600; }
+.badge-down { color: var(--red);   font-weight: 600; }
+
+/* ── Charts grid ── */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.full { grid-column: 1 / -1; }
+
+.chart-card {
+  background: var(--card);
+  background-image: var(--grad-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative corner gradient */
+.chart-card::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle at top right, rgba(59,130,246,.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.chart-title {
+  font-size: 12px; font-weight: 700;
+  color: var(--text);
+  display: flex; align-items: center; gap: 7px;
+}
+.chart-title-dot {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+}
+.dot-blue   { background: var(--grad-brand); }
+.dot-green  { background: var(--grad-green); }
+.dot-purple { background: var(--grad-purple); }
+.dot-gold   { background: var(--grad-gold); }
+
+.chart-badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: .02em;
+}
+.chart-badge.blue   { background: rgba(59,130,246,.12); color: #93c5fd; border: 1px solid rgba(59,130,246,.2); }
+.chart-badge.green  { background: rgba(16,185,129,.12);  color: #6ee7b7; border: 1px solid rgba(16,185,129,.2); }
+.chart-badge.purple { background: rgba(139,92,246,.12);  color: #c4b5fd; border: 1px solid rgba(139,92,246,.2); }
+
+/* Fake chart area */
+.chart-area {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.chart-area.tall  { height: 200px; }
+.chart-area.short { height: 160px; }
+
+/* Pie chart dummy */
+.pie-wrap {
+  display: flex; align-items: center; gap: 20px;
+  height: 200px;
+}
+.pie-svg { flex-shrink: 0; }
+.pie-legend { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.legend-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px;
+}
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.legend-ticker { font-weight: 700; color: var(--text); flex: 1; }
+.legend-pct { font-weight: 600; color: var(--muted2); font-size: 11px; }
+.legend-bar-wrap { width: 60px; height: 4px; background: var(--border); border-radius: 2px; }
+.legend-bar { height: 100%; border-radius: 2px; }
+
+/* Dummy line chart */
+.line-chart {
+  height: 200px;
+  background: linear-gradient(180deg, rgba(6,18,36,.8) 0%, rgba(6,18,36,.4) 100%);
+  position: relative;
+  display: flex; align-items: flex-end;
+  padding: 0 0 24px 36px;
+  gap: 1px;
+}
+
+/* Fake SVG bars */
+.fake-bars {
+  display: flex; align-items: flex-end;
+  gap: 3px;
+  height: 100%;
+  width: 100%;
+  padding: 12px 0 0;
+}
+.fbar {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  opacity: .75;
+  transition: opacity .15s;
+}
+.fbar:hover { opacity: 1; }
+
+/* ── Weights table ── */
+.wtable-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.wtable {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px;
+}
+.wtable thead tr {
+  background: rgba(6,18,36,.8);
+}
+.wtable th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px; font-weight: 700;
+  color: var(--muted2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.wtable tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.wtable tbody tr:hover { background: rgba(255,255,255,.02); }
+.wtable tbody tr:last-child { border-bottom: none; }
+.wtable td { padding: 9px 12px; vertical-align: middle; }
+
+.wbar-wrap { height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; min-width: 80px; }
+.wbar      { height: 100%; border-radius: 3px; }
+
+.tag {
+  display: inline-block;
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: .02em;
+}
+.tag-green  { background: rgba(16,185,129,.12); color: #6ee7b7; }
+.tag-blue   { background: rgba(59,130,246,.12);  color: #93c5fd; }
+.tag-gold   { background: rgba(245,158,11,.12);  color: #fcd34d; }
+.tag-red    { background: rgba(239,68,68,.12);   color: #fca5a5; }
+.tag-purple { background: rgba(139,92,246,.12);  color: #c4b5fd; }
+
+/* ── Misc ── */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted2);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-sm:hover { border-color: var(--blue); color: var(--blue); background: rgba(59,130,246,.06); }
+
+.divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Comparison badge ── */
+.compare-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  background: rgba(16,185,129,.06);
+  border: 1px solid rgba(16,185,129,.15);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.compare-row svg { width: 13px; height: 13px; color: var(--green); flex-shrink: 0; }
+.compare-label { color: var(--muted2); }
+.compare-val { font-weight: 700; color: var(--green); }
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header class="app-header">
+    <span class="logo-dot"></span>
+    <span class="logo">PortOpt</span>
+    <div class="nav-divider"></div>
+
+    <button class="nav-btn active">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      Portfolio
+    </button>
+    <button class="nav-btn">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="2 12 6 8 9 11 14 5"/></svg>
+      Valuation
+    </button>
+
+    <div class="header-right">
+      <span class="status-dot">Live</span>
+      <div class="nav-divider"></div>
+      <button class="btn-icon" title="Export PDF">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12V4h5l3 3v5H4z"/><path d="M9 4v3h3"/></svg>
+      </button>
+      <button class="btn-icon" title="Settings">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Project tabs ── -->
+  <div class="tabs-row">
+    <button class="proj-tab active">
+      Tech Portfolio
+      <span class="tab-badge">7</span>
+    </button>
+    <button class="proj-tab">Growth Fund</button>
+    <button class="proj-tab">Dividend Mix</button>
+    <button class="tab-add">+</button>
+  </div>
+
+  <!-- ── Sidebar ── -->
+  <aside>
+
+    <!-- Ticker search -->
+    <div class="section">
+      <div>
+        <div class="sec-title">
+          <div class="sec-title-icon blue">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg>
+          </div>
+          Add Stocks
+        </div>
+        <div class="search-wrap" style="margin-top:6px">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg>
+          <input class="search-input" type="text" placeholder="Search ticker — AAPL, MSFT…">
+        </div>
+      </div>
+      <div>
+        <div class="sec-title" style="margin-bottom:8px">Holdings <span style="color:var(--muted);font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;margin-left:4px">7 stocks</span></div>
+        <div class="tickers-list">
+          <span class="ticker-pill">AAPL <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">MSFT <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">NVDA <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">GOOGL <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">AMZN <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">META <button class="ticker-pill-remove">✕</button></span>
+          <span class="ticker-pill">TSLA <button class="ticker-pill-remove">✕</button></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="section">
+      <div class="sec-title">
+        <div class="sec-title-icon cyan">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+        </div>
+        Parameters
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Start Date</label>
+          <input class="input" type="date" value="2020-01-01">
+        </div>
+        <div>
+          <label>End Date</label>
+          <input class="input" type="date" value="2025-01-01">
+        </div>
+      </div>
+      <div class="range-group">
+        <div class="range-header">
+          <label style="margin:0">Risk-Free Rate</label>
+          <span class="range-value">4.25%</span>
+        </div>
+        <input type="range" min="0" max="10" step="0.25" value="4.25">
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Min Weight</label>
+          <input class="input" type="number" value="0" step="0.01">
+        </div>
+        <div>
+          <label>Max Weight</label>
+          <input class="input" type="number" value="0.40" step="0.01">
+        </div>
+      </div>
+    </div>
+
+    <!-- Method -->
+    <div class="section">
+      <div class="sec-title">
+        <div class="sec-title-icon gold">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2 12 6 8 9 11 14 5"/></svg>
+        </div>
+        Optimization Method
+      </div>
+      <div class="method-grid">
+        <button class="method-btn active">
+          Max Sharpe
+          <span class="method-label">Best risk/return</span>
+        </button>
+        <button class="method-btn">
+          Min Vol
+          <span class="method-label">Lowest risk</span>
+        </button>
+        <button class="method-btn">
+          Risk Parity
+          <span class="method-label">Equal contrib.</span>
+        </button>
+        <button class="method-btn active purple">
+          Black-Litterman
+          <span class="method-label">View-adjusted</span>
+        </button>
+        <button class="method-btn">
+          HRP
+          <span class="method-label">Cluster-based</span>
+        </button>
+        <button class="method-btn">
+          Equal Weight
+          <span class="method-label">Naïve baseline</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Optimize CTA -->
+    <button class="btn-optimize">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="2 12 6 8 9 11 14 5"/></svg>
+      Run Optimization
+    </button>
+
+  </aside>
+
+  <!-- ── Main ── -->
+  <main>
+
+    <!-- Sub-tabs -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div class="sub-tabs">
+        <button class="sub-tab active">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+          Overview
+        </button>
+        <button class="sub-tab">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="2 12 6 8 9 11 14 5"/></svg>
+          Performance
+        </button>
+        <button class="sub-tab">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="5"/><path d="M8 5v3l2 2"/></svg>
+          Risk
+        </button>
+        <button class="sub-tab">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="8" y1="5" x2="8" y2="11"/></svg>
+          Weights
+        </button>
+      </div>
+
+      <!-- Benchmark comparison badge -->
+      <div class="compare-row">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="2 12 6 8 9 11 14 5"/></svg>
+        <span class="compare-label">vs SPY:</span>
+        <span class="compare-val">+6.3% alpha</span>
+        <span style="color:var(--muted);font-size:10px">&nbsp;·&nbsp;5Y annualized</span>
+      </div>
+    </div>
+
+    <!-- Metric cards -->
+    <div class="metrics-grid">
+      <div class="metric-card blue">
+        <div class="metric-icon blue">📈</div>
+        <div class="metric-label">Expected Return</div>
+        <div class="metric-val blue">18.4%</div>
+        <div class="metric-sub"><span class="badge-up">▲ 2.1%</span> vs benchmark</div>
+      </div>
+      <div class="metric-card green">
+        <div class="metric-icon green">⚡</div>
+        <div class="metric-label">Sharpe Ratio</div>
+        <div class="metric-val green">1.62</div>
+        <div class="metric-sub"><span class="badge-up">▲ 0.38</span> vs equal-weight</div>
+      </div>
+      <div class="metric-card gold">
+        <div class="metric-icon gold">🎯</div>
+        <div class="metric-label">Annual Volatility</div>
+        <div class="metric-val gold">11.3%</div>
+        <div class="metric-sub"><span class="badge-down">▼ 3.2%</span> risk reduced</div>
+      </div>
+      <div class="metric-card purple">
+        <div class="metric-icon purple">🛡️</div>
+        <div class="metric-label">Max Drawdown</div>
+        <div class="metric-val purple">-14.8%</div>
+        <div class="metric-sub"><span class="badge-up">▲ 5.2%</span> better than SPY</div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="charts-grid">
+
+      <!-- Weights doughnut -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">
+            <span class="chart-title-dot dot-blue"></span>
+            Optimal Allocation
+          </div>
+          <span class="chart-badge blue">Max Sharpe</span>
+        </div>
+        <div class="pie-wrap">
+          <!-- Fake SVG donut -->
+          <svg class="pie-svg" width="130" height="130" viewBox="0 0 130 130">
+            <defs>
+              <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient>
+              <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient>
+              <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+              <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
+            </defs>
+            <!-- Donut segments (fake, just visual) -->
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#g1)" stroke-width="20" stroke-dasharray="94.2 220.8" stroke-dashoffset="0" transform="rotate(-90 65 65)"/>
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#g2)" stroke-width="20" stroke-dasharray="75.4 239.6" stroke-dashoffset="-94.2" transform="rotate(-90 65 65)"/>
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#g3)" stroke-width="20" stroke-dasharray="56.5 258.5" stroke-dashoffset="-169.6" transform="rotate(-90 65 65)"/>
+            <circle cx="65" cy="65" r="50" fill="none" stroke="url(#g4)" stroke-width="20" stroke-dasharray="88.3 226.7" stroke-dashoffset="-226.1" transform="rotate(-90 65 65)"/>
+            <!-- Center label -->
+            <text x="65" y="61" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="800" font-family="Inter,sans-serif">7</text>
+            <text x="65" y="74" text-anchor="middle" fill="#607898" font-size="9" font-family="Inter,sans-serif" letter-spacing="1">STOCKS</text>
+          </svg>
+          <div class="pie-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#3b82f6,#06b6d4)"></div><span class="legend-ticker">NVDA</span><div class="legend-bar-wrap"><div class="legend-bar" style="width:78%;background:linear-gradient(90deg,#3b82f6,#06b6d4)"></div></div><span class="legend-pct">30.2%</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#10b981,#06b6d4)"></div><span class="legend-ticker">MSFT</span><div class="legend-bar-wrap"><div class="legend-bar" style="width:62%;background:linear-gradient(90deg,#10b981,#06b6d4)"></div></div><span class="legend-pct">24.1%</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#8b5cf6,#3b82f6)"></div><span class="legend-ticker">AAPL</span><div class="legend-bar-wrap"><div class="legend-bar" style="width:46%;background:linear-gradient(90deg,#8b5cf6,#3b82f6)"></div></div><span class="legend-pct">18.0%</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></div><span class="legend-ticker">GOOGL</span><div class="legend-bar-wrap"><div class="legend-bar" style="width:35%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div></div><span class="legend-pct">13.8%</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:#607898"></div><span class="legend-ticker">Others</span><div class="legend-bar-wrap"><div class="legend-bar" style="width:36%;background:#607898"></div></div><span class="legend-pct">13.9%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cumulative return chart -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">
+            <span class="chart-title-dot dot-green"></span>
+            Cumulative Return
+          </div>
+          <span class="chart-badge green">+134.2%</span>
+        </div>
+        <!-- Fake SVG line chart -->
+        <svg width="100%" height="190" viewBox="0 0 400 190" preserveAspectRatio="none" style="display:block">
+          <defs>
+            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="100%" stop-color="#06b6d4"/>
+            </linearGradient>
+            <linearGradient id="fillGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#10b981" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="spyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#607898"/>
+              <stop offset="100%" stop-color="#607898"/>
+            </linearGradient>
+          </defs>
+          <!-- Grid lines -->
+          <line x1="0" y1="40" x2="400" y2="40" stroke="#1e3050" stroke-width=".5"/>
+          <line x1="0" y1="80" x2="400" y2="80" stroke="#1e3050" stroke-width=".5"/>
+          <line x1="0" y1="120" x2="400" y2="120" stroke="#1e3050" stroke-width=".5"/>
+          <line x1="0" y1="160" x2="400" y2="160" stroke="#1e3050" stroke-width=".5"/>
+          <!-- Fill area portfolio -->
+          <path d="M0,155 C40,150 80,140 120,125 C160,110 180,100 220,80 C260,60 300,50 340,35 C370,25 390,20 400,18 L400,190 L0,190 Z" fill="url(#fillGrad)"/>
+          <!-- Portfolio line -->
+          <path d="M0,155 C40,150 80,140 120,125 C160,110 180,100 220,80 C260,60 300,50 340,35 C370,25 390,20 400,18" fill="none" stroke="url(#lineGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- SPY line (dashed) -->
+          <path d="M0,160 C60,155 120,148 180,138 C240,128 290,115 340,100 C370,92 390,88 400,85" fill="none" stroke="#607898" stroke-width="1.5" stroke-dasharray="5,3" stroke-linecap="round"/>
+          <!-- End dots -->
+          <circle cx="400" cy="18" r="4" fill="#10b981" filter="url(#glow)"/>
+          <circle cx="400" cy="85" r="3" fill="#607898"/>
+          <!-- Labels -->
+          <text x="6" y="185" fill="#607898" font-size="9" font-family="Inter,sans-serif">2020</text>
+          <text x="96" y="185" fill="#607898" font-size="9" font-family="Inter,sans-serif">2021</text>
+          <text x="196" y="185" fill="#607898" font-size="9" font-family="Inter,sans-serif">2022</text>
+          <text x="296" y="185" fill="#607898" font-size="9" font-family="Inter,sans-serif">2024</text>
+        </svg>
+        <div style="display:flex;gap:16px;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <div style="width:16px;height:2px;background:linear-gradient(90deg,#10b981,#06b6d4);border-radius:1px"></div>
+            <span style="color:var(--muted2)">Portfolio</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <div style="width:16px;height:1.5px;background:#607898;border-radius:1px;background-image:repeating-linear-gradient(90deg,#607898 0,#607898 5px,transparent 5px,transparent 8px)"></div>
+            <span style="color:var(--muted)">SPY</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weights table (full width) -->
+      <div class="chart-card full">
+        <div class="chart-header">
+          <div class="chart-title">
+            <span class="chart-title-dot dot-purple"></span>
+            Position Weights
+          </div>
+          <button class="btn-sm">Export CSV</button>
+        </div>
+        <div class="wtable-wrap">
+          <table class="wtable">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Company</th>
+                <th>Weight</th>
+                <th style="min-width:120px">Allocation Bar</th>
+                <th>Expected Return</th>
+                <th>Volatility</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>NVDA</strong></td>
+                <td style="color:var(--muted2)">NVIDIA Corp.</td>
+                <td><strong style="color:var(--blue)">30.2%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:100%;background:linear-gradient(90deg,#3b82f6,#06b6d4)"></div></div></td>
+                <td style="color:var(--green)">+38.1%</td>
+                <td style="color:var(--muted2)">24.5%</td>
+                <td><span class="tag tag-blue">Max</span></td>
+              </tr>
+              <tr>
+                <td><strong>MSFT</strong></td>
+                <td style="color:var(--muted2)">Microsoft Corp.</td>
+                <td><strong style="color:var(--blue)">24.1%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:80%;background:linear-gradient(90deg,#3b82f6,#06b6d4)"></div></div></td>
+                <td style="color:var(--green)">+22.4%</td>
+                <td style="color:var(--muted2)">18.2%</td>
+                <td><span class="tag tag-green">Hold</span></td>
+              </tr>
+              <tr>
+                <td><strong>AAPL</strong></td>
+                <td style="color:var(--muted2)">Apple Inc.</td>
+                <td><strong style="color:var(--blue)">18.0%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:60%;background:linear-gradient(90deg,#3b82f6,#06b6d4)"></div></div></td>
+                <td style="color:var(--green)">+16.2%</td>
+                <td style="color:var(--muted2)">15.8%</td>
+                <td><span class="tag tag-green">Hold</span></td>
+              </tr>
+              <tr>
+                <td><strong>GOOGL</strong></td>
+                <td style="color:var(--muted2)">Alphabet Inc.</td>
+                <td><strong style="color:var(--blue)">13.8%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:46%;background:linear-gradient(90deg,#3b82f6,#06b6d4)"></div></div></td>
+                <td style="color:var(--green)">+18.9%</td>
+                <td style="color:var(--muted2)">20.1%</td>
+                <td><span class="tag tag-green">Hold</span></td>
+              </tr>
+              <tr>
+                <td><strong>AMZN</strong></td>
+                <td style="color:var(--muted2)">Amazon.com Inc.</td>
+                <td><strong style="color:var(--gold)">7.1%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:24%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div></div></td>
+                <td style="color:var(--green)">+14.5%</td>
+                <td style="color:var(--muted2)">22.3%</td>
+                <td><span class="tag tag-gold">Light</span></td>
+              </tr>
+              <tr>
+                <td><strong>META</strong></td>
+                <td style="color:var(--muted2)">Meta Platforms</td>
+                <td><strong style="color:var(--gold)">4.9%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:16%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div></div></td>
+                <td style="color:var(--green)">+21.2%</td>
+                <td style="color:var(--muted2)">26.7%</td>
+                <td><span class="tag tag-gold">Light</span></td>
+              </tr>
+              <tr>
+                <td><strong>TSLA</strong></td>
+                <td style="color:var(--muted2)">Tesla Inc.</td>
+                <td><strong style="color:var(--muted)">1.9%</strong></td>
+                <td><div class="wbar-wrap"><div class="wbar" style="width:6%;background:#607898"></div></div></td>
+                <td style="color:var(--muted2)">+8.1%</td>
+                <td style="color:var(--red)">42.1%</td>
+                <td><span class="tag tag-red">Min</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /charts-grid -->
+  </main>
+</div>
+
+</body>
+</html>
