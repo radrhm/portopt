@@ -1017,6 +1017,64 @@ function _dcfCardHTML(tk, d) {
     ${oeBtn}
   </div>`;
 
+  // Bear / Bull defaults (Base is tied to the main inputs above)
+  const g1n = parseFloat(g1), g2n = parseFloat(g2);
+  const waccSugg = d.wacc_suggestion || 9;
+  const bearG1   = Math.max(-5, g1n * 0.4).toFixed(1);
+  const bearG2   = Math.max(-5, g2n * 0.4).toFixed(1);
+  const bearWacc = (waccSugg + 2.0).toFixed(1);
+  const bullG1   = Math.min(60, g1n * 1.5).toFixed(1);
+  const bullG2   = Math.min(40, g2n * 1.5).toFixed(1);
+  const bullWacc = Math.max(4.0, waccSugg - 1.0).toFixed(1);
+
+  const scenarioHTML = `
+    <div class="val-scenario-section">
+      <div class="val-scenario-title">
+        Scenarios &amp; Probability-Weighted Fair Value
+        <span class="val-scenario-hint">Adjust Bear/Bull + probabilities (Base uses the inputs above)</span>
+      </div>
+      <table class="val-scenario-table">
+        <thead>
+          <tr>
+            <th></th><th>g₁ %</th><th>g₂ %</th><th>Tg %</th><th>WACC %</th><th>Prob %</th><th>Fair Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="scn-bear">
+            <th>🐻 Bear</th>
+            <td><input type="number" id="${tk}-dcf-bear-g1"   value="${bearG1}"  step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bear-g2"   value="${bearG2}"  step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bear-tg"   value="1.5"        step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bear-wacc" value="${bearWacc}" step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bear-p"    value="25"          step="5" min="0" max="100"></td>
+            <td class="scn-fv" id="res-${tk}-dcf-bear">—</td>
+          </tr>
+          <tr class="scn-base">
+            <th>➡️ Base</th>
+            <td colspan="4" class="scn-base-note">Uses main inputs above</td>
+            <td><input type="number" id="${tk}-dcf-base-p"    value="50"          step="5" min="0" max="100"></td>
+            <td class="scn-fv" id="res-${tk}-dcf-base">—</td>
+          </tr>
+          <tr class="scn-bull">
+            <th>🐂 Bull</th>
+            <td><input type="number" id="${tk}-dcf-bull-g1"   value="${bullG1}"  step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bull-g2"   value="${bullG2}"  step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bull-tg"   value="3.0"        step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bull-wacc" value="${bullWacc}" step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bull-p"    value="25"          step="5" min="0" max="100"></td>
+            <td class="scn-fv" id="res-${tk}-dcf-bull">—</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colspan="5" class="scn-weighted-lbl">Probability-Weighted Fair Value</th>
+            <td id="res-${tk}-dcf-pw-sum" class="scn-pw-sum">—</td>
+            <td id="res-${tk}-dcf-pw" class="scn-pw">—</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+
   const body = `
     ${fcfHistory}
     <div id="mchart-${tk}-dcf" class="val-mchart"></div>
@@ -1030,7 +1088,8 @@ function _dcfCardHTML(tk, d) {
       ${_inp(`${tk}-dcf-tg`,      'Terminal Growth (%)',      '2.5',        'Perpetual growth after yr 10 (≈ GDP)', '0.1', '0', '5')}
       ${_inp(`${tk}-dcf-wacc`,    'WACC (%)',                 d.wacc_suggestion, 'Weighted avg cost of capital — discounts FCFF to Enterprise Value', '0.1', '3', '30')}
       ${_inp(`${tk}-dcf-mos`,     'Margin of Safety (%)',     '15',         'Discount applied to final equity value', '1', '0', '50')}
-    </div>`;
+    </div>
+    ${scenarioHTML}`;
 
   return _cardWrap('dcf', tk, 'Discounted Cash Flow (DCF)',
     '2-stage growth model: discount projected FCFs + terminal value back to today',
@@ -1053,9 +1112,10 @@ function _reverseDcfCardHTML(tk, d) {
     <div class="val-two-results">
       <div class="val-two-item"><span class="val-two-label">Implied 5-yr Growth</span><span class="val-card-result sml" id="res-${tk}-rdcf-g">—</span></div>
       <div class="val-two-item"><span class="val-two-label">Interpretation</span><span class="val-card-result sml" id="res-${tk}-rdcf-note" style="font-size:11px;">—</span></div>
-    </div>`;
+    </div>
+    <div id="rdcf-extras-${tk}" class="val-rdcf-extras"></div>`;
   return _cardWrap('rdcf', tk, 'Reverse DCF (Implied Growth)',
-    'Inverts the DCF: given today\u2019s price, what FCF growth is baked in?',
+    'Inverts the DCF: given today\u2019s price, what FCF growth is baked in? Plus TV-share gauge and implied-g sensitivity curve.',
     body);
 }
 
@@ -1274,7 +1334,10 @@ function _recalcTicker(tk) {
   results.dcf = _calcDCF(dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, dcfNdPs);
   _setResult(`res-${tk}-dcf`, results.dcf, cur);
   _setUD(`ud-${tk}-dcf`, results.dcf, price);
-  _setDCFWorkings(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, results.dcf, cur, dcfNdPs);
+  _setDCFWorkings(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, results.dcf, cur, dcfNdPs, price);
+
+  // DCF Scenarios (Bear / Base / Bull) & probability-weighted fair value
+  _recalcDCFScenarios(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, dcfNdPs, results.dcf, cur);
 
   // Reverse DCF — solves for implied growth, NOT added to `results` (excluded from compare chart)
   const rdFcf     = _gv(`${tk}-rdcf-fcf`);
@@ -1284,7 +1347,9 @@ function _recalcTicker(tk) {
   const rdNdPs    = rdSh > 0 ? (rdNetDebt * 1e6) / (rdSh * 1e6) : 0;
   const rdWacc  = _gv(`${tk}-rdcf-wacc`) / 100;
   const rdTg    = _gv(`${tk}-rdcf-tg`)   / 100;
-  const impliedG = _calcReverseDCF(rdFcfPs, rdWacc, rdTg, price, rdNdPs);
+  const revRes  = _calcReverseDCF(rdFcfPs, rdWacc, rdTg, price, rdNdPs);
+  const impliedG = revRes ? revRes.g : null;
+  const revTvShare = revRes ? revRes.tvShare : null;
   const gEl = document.getElementById(`res-${tk}-rdcf-g`);
   const nEl = document.getElementById(`res-${tk}-rdcf-note`);
   const mainEl = document.getElementById(`res-${tk}-rdcf`);
@@ -1305,6 +1370,7 @@ function _recalcTicker(tk) {
     if (nEl) { nEl.textContent = note; nEl.className = `val-card-result sml ${cls}`; }
     if (mainEl) { mainEl.textContent = txt; mainEl.className = `val-card-result ${cls}`; }
   }
+  _setReverseDCFExtras(tk, rdFcfPs, rdWacc, rdTg, price, rdNdPs, revTvShare, cur);
   const udEl = document.getElementById(`ud-${tk}-rdcf`);
   if (udEl) udEl.innerHTML = '';
 
@@ -1407,17 +1473,28 @@ function _recalcTicker(tk) {
 
 // ── Core math ─────────────────────────────────────────────────────────────────
 
-function _calcDCF(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare) {
-  // Discounts FCFF at WACC → Enterprise Value per share.
-  // Then subtracts net-debt-per-share to get Equity Value, then applies MoS.
+function _calcDCFBreakdown(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare) {
+  // Full decomposition: returns PV tranches, EV, equity, TV-share and final fair value.
   if (!fcffPs || wacc <= tg || wacc <= 0) return null;
-  let pv = 0, cf = fcffPs;
-  for (let y = 1; y <= 5;  y++) { cf *= (1 + g1); pv += cf / Math.pow(1 + wacc, y); }
-  for (let y = 6; y <= 10; y++) { cf *= (1 + g2); pv += cf / Math.pow(1 + wacc, y); }
-  const tv = (cf * (1 + tg)) / (wacc - tg);
-  pv += tv / Math.pow(1 + wacc, 10);          // pv = Enterprise Value per share
-  const equityPs = pv - (netDebtPerShare || 0); // EV → Equity
-  return equityPs > 0 ? r2(equityPs * (1 - mos)) : null;
+  let pv5 = 0, pv10 = 0, cf = fcffPs;
+  const yr5 = [], yr10 = [];
+  for (let y = 1; y <= 5;  y++) { cf *= (1 + g1); pv5  += cf/Math.pow(1+wacc,y); yr5.push(cf); }
+  for (let y = 6; y <= 10; y++) { cf *= (1 + g2); pv10 += cf/Math.pow(1+wacc,y); yr10.push(cf); }
+  const tv   = (cf * (1 + tg)) / (wacc - tg);
+  const pvTv = tv / Math.pow(1 + wacc, 10);
+  const ev   = pv5 + pv10 + pvTv;
+  const equityPs  = ev - (netDebtPerShare || 0);
+  const fairValue = equityPs > 0 ? r2(equityPs * (1 - (mos || 0))) : null;
+  return {
+    fairValue, ev, equityPs, pv5, pv10, pvTv, tv, cf10: cf,
+    tvShare: ev > 0 ? pvTv / ev : 0,
+    yr5, yr10,
+  };
+}
+
+function _calcDCF(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare) {
+  const b = _calcDCFBreakdown(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare);
+  return b ? b.fairValue : null;
 }
 
 function _calcEPV(ebitM, tax, wacc, netDebtM, sharesM) {
@@ -1441,9 +1518,9 @@ function _calcEVMult(earnM, mult, netDebtM, sharesM) {
 
 function _calcReverseDCF(fcffPs, wacc, tg, targetPrice, netDebtPerShare) {
   // Bisects over g to find growth rate that makes DCF EV/share equal to
-  // targetPrice + netDebtPerShare (i.e. backs out implied FCFF growth from market price).
+  // targetPrice + netDebtPerShare. Returns {g, tvShare, evPs} or null.
   if (!fcffPs || fcffPs <= 0 || wacc <= tg || wacc <= 0 || !targetPrice || targetPrice <= 0) return null;
-  const targetEV = targetPrice + (netDebtPerShare || 0); // solve at EV level
+  const targetEV = targetPrice + (netDebtPerShare || 0);
   let lo = -0.30, hi = 1.00;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
@@ -1455,9 +1532,127 @@ function _calcReverseDCF(fcffPs, wacc, tg, targetPrice, netDebtPerShare) {
     pv += tv / Math.pow(1 + wacc, 10);
     if (pv > targetEV) hi = mid; else lo = mid;
   }
-  const result = (lo + hi) / 2;
-  if (result <= -0.299 || result >= 0.999) return null;
-  return result;
+  const g = (lo + hi) / 2;
+  if (g <= -0.299 || g >= 0.999) return null;
+  // Now re-run at the solution to compute TV share
+  const b = _calcDCFBreakdown(fcffPs, g, g * 0.6, tg, wacc, 0, netDebtPerShare);
+  if (!b) return { g, tvShare: 0, evPs: targetEV };
+  return { g, tvShare: b.tvShare, evPs: b.ev };
+}
+
+// ── B1: DCF scenarios & probability-weighted fair value ──────────────────────
+
+function _recalcDCFScenarios(tk, fcffPs, baseG1, baseG2, baseTg, baseWacc, mos, ndPs, baseFV, cur) {
+  // Bear / Bull read from scenario inputs; Base uses the main DCF inputs.
+  const read = (suffix) => {
+    const bG1 = _gv(`${tk}-dcf-${suffix}-g1`)   / 100;
+    const bG2 = _gv(`${tk}-dcf-${suffix}-g2`)   / 100;
+    const bTg = _gv(`${tk}-dcf-${suffix}-tg`)   / 100;
+    const bW  = _gv(`${tk}-dcf-${suffix}-wacc`) / 100;
+    const bP  = Math.max(0, _gv(`${tk}-dcf-${suffix}-p`));
+    const b   = _calcDCFBreakdown(fcffPs, bG1, bG2, bTg, bW, mos, ndPs);
+    return { fv: b ? b.fairValue : null, p: bP };
+  };
+  const bear = read('bear');
+  const bull = read('bull');
+  const baseP = Math.max(0, _gv(`${tk}-dcf-base-p`));
+  const base  = { fv: baseFV, p: baseP };
+
+  const fmtFV = (fv) => (fv === null || fv === undefined) ? '—' : _fp(fv, cur);
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set(`res-${tk}-dcf-bear`, fmtFV(bear.fv));
+  set(`res-${tk}-dcf-base`, fmtFV(base.fv));
+  set(`res-${tk}-dcf-bull`, fmtFV(bull.fv));
+
+  // Probability-weighted fair value (normalized if probs don't sum to 100)
+  const totP = bear.p + base.p + bull.p;
+  const sumEl = document.getElementById(`res-${tk}-dcf-pw-sum`);
+  if (sumEl) {
+    sumEl.textContent = `Σp=${totP.toFixed(0)}%`;
+    sumEl.className = 'scn-pw-sum ' + (Math.abs(totP - 100) < 1 ? 'ok' : 'warn');
+  }
+  const pwEl = document.getElementById(`res-${tk}-dcf-pw`);
+  if (!pwEl) return;
+  if (totP <= 0 || (bear.fv === null && base.fv === null && bull.fv === null)) {
+    pwEl.textContent = '—';
+    return;
+  }
+  let weighted = 0, weightUsed = 0;
+  for (const s of [bear, base, bull]) {
+    if (s.fv !== null && s.fv !== undefined) {
+      weighted  += s.fv * (s.p / totP);
+      weightUsed += (s.p / totP);
+    }
+  }
+  // Re-normalize if some scenarios failed
+  if (weightUsed > 0) weighted = weighted / weightUsed;
+  pwEl.textContent = _fp(r2(weighted), cur);
+}
+
+// ── B2: Reverse-DCF extras (implied-g curve + TV-share gauge) ────────────────
+
+function _setReverseDCFExtras(tk, fcffPs, wacc, tg, price, ndPs, tvShare, cur) {
+  const el = document.getElementById(`rdcf-extras-${tk}`); if (!el) return;
+  if (!fcffPs || fcffPs <= 0 || !price || price <= 0) { el.innerHTML = ''; return; }
+
+  // Implied-g curve: re-solve at WACC ± 2pp (5 points)
+  const waccs = [-2, -1, 0, 1, 2].map(d => wacc + d/100);
+  const rows  = waccs.map(w => {
+    const r = _calcReverseDCF(fcffPs, w, tg, price, ndPs);
+    const g = r ? r.g : null;
+    const tv = r ? r.tvShare : null;
+    const isCur = Math.abs(w - wacc) < 1e-6;
+    let cls = 'impl-row' + (isCur ? ' impl-current' : '');
+    let gCls = '';
+    if (g !== null) {
+      const pct = g * 100;
+      if (pct > 25) gCls = 'red';
+      else if (pct > 15) gCls = 'gold';
+      else if (pct >= 0) gCls = '';
+      else gCls = 'green';
+    }
+    const gTxt = g === null ? 'N/A' : `${(g*100).toFixed(1)}%`;
+    const tvTxt = tv === null ? '—' : `${(tv*100).toFixed(0)}%`;
+    return `<tr class="${cls}">
+      <td>${(w*100).toFixed(1)}%</td>
+      <td class="${gCls}"><strong>${gTxt}</strong></td>
+      <td>${tvTxt}</td>
+    </tr>`;
+  }).join('');
+
+  // TV-share gauge: 0–100% with shaded bar + warning at >80%
+  const tvPct = tvShare !== null && tvShare !== undefined ? (tvShare * 100) : null;
+  const tvGauge = tvPct === null ? '' : `
+    <div class="val-tv-gauge">
+      <div class="val-tv-label">
+        <span>Terminal-Value Share of Intrinsic Value</span>
+        <span class="val-tv-pct ${tvPct > 80 ? 'red' : tvPct > 60 ? 'gold' : 'green'}">${tvPct.toFixed(0)}%</span>
+      </div>
+      <div class="val-tv-bar">
+        <div class="val-tv-fill ${tvPct > 80 ? 'red' : tvPct > 60 ? 'gold' : 'green'}" style="width:${Math.min(100,tvPct)}%"></div>
+        <div class="val-tv-80line" title="80% threshold — priced-for-perfection zone"></div>
+      </div>
+      ${tvPct > 80
+        ? `<div class="val-tv-warn">⚠ Over 80% of intrinsic value comes from the terminal value — highly sensitive to WACC &amp; terminal g. Reliable only if growth endures for decades.</div>`
+        : tvPct > 60
+          ? `<div class="val-tv-note">Most of the value is long-dated — verify the moat story.</div>`
+          : `<div class="val-tv-note">Majority of value from near-term cash flows — less sensitive to terminal assumptions.</div>`
+      }
+    </div>`;
+
+  el.innerHTML = `
+    ${tvGauge}
+    <div class="val-impl-wrap">
+      <div class="val-impl-title">Implied Growth Curve (bisected across WACC ± 2pp)</div>
+      <table class="val-impl-table">
+        <thead><tr><th>WACC</th><th>Implied g</th><th>TV share</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="val-impl-note">
+        Reverse DCF is most honest when read as a <em>curve</em>, not a point.
+        A small change in WACC can swing the implied growth by several points.
+      </div>
+    </div>`;
 }
 
 // ── Workings panels ───────────────────────────────────────────────────────────
@@ -1478,30 +1673,68 @@ function _steps(arr) {
      ${label ? `<div class="step-label">${label}</div>` : ''}</div></div>`).join('');
 }
 
-function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur, netDebtPerShare) {
+function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur, netDebtPerShare, price) {
   const el = document.getElementById(`wp-${tk}-dcf`); if (!el) return;
   if (!result) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute — check inputs.</div>'; return; }
   const ndPs = netDebtPerShare || 0;
-  let cf = fcfPs, pv5 = 0;
-  const yr5 = [];
-  for (let y = 1; y <= 5; y++) { cf *= (1+g1); pv5 += cf/Math.pow(1+wacc,y); yr5.push(cf); }
-  let pv10 = 0;
-  const yr10 = [];
-  for (let y = 6; y <= 10; y++) { cf *= (1+g2); pv10 += cf/Math.pow(1+wacc,y); yr10.push(cf); }
-  const tv   = (cf*(1+tg))/(wacc-tg);
-  const pvTv = tv/Math.pow(1+wacc,10);
-  const ev   = pv5 + pv10 + pvTv;             // Enterprise Value per share
-  const eq   = ev - ndPs;                      // Equity Value per share
-  const final = eq * (1 - mos);
-  el.innerHTML = _steps([
+  const b = _calcDCFBreakdown(fcfPs, g1, g2, tg, wacc, mos, ndPs);
+  if (!b) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute — check inputs.</div>'; return; }
+  const tvPct = (b.tvShare * 100);
+  const tvWarn = tvPct > 80
+    ? `<span class="val-warn-inline">⚠ ${tvPct.toFixed(0)}% of value from Terminal → priced for perfection</span>`
+    : `<span style="color:var(--muted)">${tvPct.toFixed(0)}% of EV comes from Terminal Value</span>`;
+
+  const stepsHTML = _steps([
     ['1', `Base FCFF/share = ${_fp(fcfPs, cur)}`, 'Free Cash Flow to Firm per share — before debt service'],
-    ['2', `Year 1–5 FCFFs: ${yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}% / yr → PV sum = ${_fp(pv5, cur)}`],
-    ['3', `Year 6–10 FCFFs: ${yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}% / yr → PV sum = ${_fp(pv10, cur)}`],
-    ['4', `Terminal Value (yr 10) = ${_fp(cf,cur)} × (1+${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}%−${(tg*100).toFixed(1)}%) = ${_fp(tv, cur)}`, `PV(TV) = ${_fp(pvTv, cur)}`],
-    ['5', `Enterprise Value / share = ${_fp(pv5,cur)} + ${_fp(pv10,cur)} + ${_fp(pvTv,cur)} = ${_fp(ev, cur)}`, 'Sum of discounted FCFFs + terminal value'],
-    ['6', `Equity Value / share = EV − Net Debt/share = ${_fp(ev,cur)} − ${_fp(ndPs,cur)} = ${_fp(eq, cur)}`, 'EV → Equity bridge'],
-    ['7', `After ${(mos*100).toFixed(0)}% margin of safety: ${_fp(eq,cur)} × ${(1-mos).toFixed(2)} = ${_fp(final, cur)}`, 'Final DCF fair value'],
+    ['2', `Year 1–5 FCFFs: ${b.yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}% / yr → PV sum = ${_fp(b.pv5, cur)}`],
+    ['3', `Year 6–10 FCFFs: ${b.yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}% / yr → PV sum = ${_fp(b.pv10, cur)}`],
+    ['4', `Terminal Value (yr 10) = ${_fp(b.cf10,cur)} × (1+${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}%−${(tg*100).toFixed(1)}%) = ${_fp(b.tv, cur)}`, `PV(TV) = ${_fp(b.pvTv, cur)} · ${tvWarn}`],
+    ['5', `Enterprise Value / share = ${_fp(b.pv5,cur)} + ${_fp(b.pv10,cur)} + ${_fp(b.pvTv,cur)} = ${_fp(b.ev, cur)}`, 'Sum of discounted FCFFs + terminal value'],
+    ['6', `Equity Value / share = EV − Net Debt/share = ${_fp(b.ev,cur)} − ${_fp(ndPs,cur)} = ${_fp(b.equityPs, cur)}`, 'EV → Equity bridge'],
+    ['7', `After ${(mos*100).toFixed(0)}% margin of safety: ${_fp(b.equityPs,cur)} × ${(1-mos).toFixed(2)} = ${_fp(b.fairValue, cur)}`, 'Final DCF fair value'],
   ]);
+
+  // 5×5 sensitivity grid: WACC rows × Terminal-g cols → fair value
+  const waccSteps = [-2, -1, 0, 1, 2].map(d => wacc + d/100);
+  const tgSteps   = [-1, -0.5, 0, 0.5, 1].map(d => Math.max(0, tg + d/100));
+  const gridRows = waccSteps.map(w => {
+    const cells = tgSteps.map(t => {
+      const bb = _calcDCFBreakdown(fcfPs, g1, g2, t, w, mos, ndPs);
+      const fv = bb ? bb.fairValue : null;
+      if (fv === null || fv === undefined) return `<td class="val-sens-cell">—</td>`;
+      // Colour relative to price: >20% above price = green, >20% below = red
+      let cls = 'val-sens-cell';
+      if (price && price > 0) {
+        const ratio = fv / price;
+        if (ratio >= 1.20) cls += ' sens-green';
+        else if (ratio >= 1.05) cls += ' sens-pos';
+        else if (ratio >= 0.95) cls += ' sens-neutral';
+        else if (ratio >= 0.80) cls += ' sens-neg';
+        else cls += ' sens-red';
+      }
+      const marker = (Math.abs(w - wacc) < 1e-6 && Math.abs(t - tg) < 1e-6) ? ' sens-current' : '';
+      return `<td class="${cls}${marker}" title="WACC ${(w*100).toFixed(1)}% · Tg ${(t*100).toFixed(1)}% → ${_fp(fv,cur)}${price?' ('+((fv/price-1)*100).toFixed(0)+'% vs price)':''}">${_fp(fv, cur)}</td>`;
+    }).join('');
+    return `<tr><th class="val-sens-rowhdr">${(w*100).toFixed(1)}%</th>${cells}</tr>`;
+  }).join('');
+  const gridHTML = `
+    <div class="val-sens-wrap">
+      <div class="val-sens-title">Sensitivity: Fair Value (WACC × Terminal-g)</div>
+      <table class="val-sens-table">
+        <thead><tr><th class="val-sens-corner">WACC ↓ / Tg →</th>${tgSteps.map(t=>`<th>${(t*100).toFixed(1)}%</th>`).join('')}</tr></thead>
+        <tbody>${gridRows}</tbody>
+      </table>
+      <div class="val-sens-legend">
+        <span class="legend-sw sens-red"></span>&lt;−20% vs price
+        <span class="legend-sw sens-neg"></span>−5 to −20%
+        <span class="legend-sw sens-neutral"></span>±5%
+        <span class="legend-sw sens-pos"></span>+5 to +20%
+        <span class="legend-sw sens-green"></span>&gt;+20%
+        · Bordered cell = current inputs
+      </div>
+    </div>`;
+
+  el.innerHTML = stepsHTML + gridHTML;
 }
 
 function _setEPVWorkings(tk, ebitM, tax, wacc, netDebtM, sharesM, result, cur) {

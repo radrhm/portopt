@@ -808,3 +808,213 @@
 .val-hband.red .val-hband-label    { color: var(--red); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══════════════════════════════════════════════════════════════
+   TIER B — Scenarios, Sensitivity Heatmap, Implied-g Curve, TV Gauge
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Scenario table (DCF card) ──────────────────────────────── */
+.val-scenario-section {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(99,102,241,.04);
+  border: 1px solid rgba(99,102,241,.18);
+  border-radius: 8px;
+}
+.val-scenario-title {
+  font-size: 12px; font-weight: 700; color: #c7d2fe;
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 8px;
+}
+.val-scenario-hint {
+  display: block; margin-top: 2px;
+  font-size: 10px; font-weight: 400; color: var(--muted);
+  text-transform: none; letter-spacing: 0;
+}
+.val-scenario-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.val-scenario-table th,
+.val-scenario-table td { padding: 4px 6px; text-align: center; }
+.val-scenario-table thead th {
+  font-size: 10px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.val-scenario-table tbody th {
+  text-align: left; font-weight: 600; padding-right: 8px;
+  white-space: nowrap;
+}
+.val-scenario-table tbody tr.scn-bear th { color: #fca5a5; }
+.val-scenario-table tbody tr.scn-base th { color: #c7d2fe; }
+.val-scenario-table tbody tr.scn-bull th { color: #86efac; }
+.val-scenario-table input[type="number"] {
+  width: 100%; max-width: 60px;
+  padding: 3px 5px; font-size: 11px;
+  background: #0a1020; color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  text-align: center;
+}
+.val-scenario-table .scn-base-note {
+  color: var(--muted); font-size: 11px; font-style: italic;
+}
+.val-scenario-table .scn-fv {
+  font-weight: 700; color: var(--fg);
+}
+.val-scenario-table tfoot th.scn-weighted-lbl {
+  text-align: right; padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted); font-weight: 600;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+}
+.val-scenario-table tfoot .scn-pw-sum {
+  padding-top: 8px; border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--muted);
+}
+.val-scenario-table tfoot .scn-pw-sum.ok   { color: var(--green); }
+.val-scenario-table tfoot .scn-pw-sum.warn { color: var(--gold); }
+.val-scenario-table tfoot .scn-pw {
+  padding-top: 8px; border-top: 1px solid var(--border);
+  font-weight: 800; font-size: 14px; color: #c7d2fe;
+}
+
+/* ── Sensitivity heatmap (DCF workings) ─────────────────────── */
+.val-sens-wrap { margin-top: 16px; }
+.val-sens-title {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.val-sens-table {
+  width: 100%; border-collapse: separate; border-spacing: 2px;
+  font-size: 11px;
+}
+.val-sens-table thead th {
+  background: #0a1020; color: var(--muted);
+  font-weight: 600; padding: 4px 6px;
+  font-size: 10px; text-transform: uppercase;
+}
+.val-sens-table .val-sens-corner {
+  font-size: 9px; font-weight: 500;
+}
+.val-sens-table .val-sens-rowhdr {
+  background: #0a1020; color: var(--muted);
+  font-weight: 600; font-size: 10px; padding: 4px 6px;
+}
+.val-sens-cell {
+  padding: 4px 6px; text-align: center;
+  border-radius: 4px; font-weight: 500;
+  background: rgba(255,255,255,.03);
+  color: var(--fg);
+}
+.val-sens-cell.sens-green   { background: rgba(16,185,129,.28); color: #6ee7b7; font-weight: 700; }
+.val-sens-cell.sens-pos     { background: rgba(16,185,129,.12); color: #86efac; }
+.val-sens-cell.sens-neutral { background: rgba(255,255,255,.04); color: var(--fg);  }
+.val-sens-cell.sens-neg     { background: rgba(239,68,68,.12);  color: #fca5a5; }
+.val-sens-cell.sens-red     { background: rgba(239,68,68,.28);  color: #fca5a5; font-weight: 700; }
+.val-sens-cell.sens-current {
+  outline: 2px solid #818cf8;
+  outline-offset: -2px;
+}
+.val-sens-legend {
+  margin-top: 6px; font-size: 10px; color: var(--muted);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.val-sens-legend .legend-sw {
+  display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px;
+}
+.val-sens-legend .legend-sw.sens-green   { background: rgba(16,185,129,.28); }
+.val-sens-legend .legend-sw.sens-pos     { background: rgba(16,185,129,.12); }
+.val-sens-legend .legend-sw.sens-neutral { background: rgba(255,255,255,.08); }
+.val-sens-legend .legend-sw.sens-neg     { background: rgba(239,68,68,.12);  }
+.val-sens-legend .legend-sw.sens-red     { background: rgba(239,68,68,.28);  }
+
+/* ── DCF workings inline TV warning ────────────────────────── */
+.val-warn-inline {
+  color: var(--red); font-weight: 600;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.25);
+  border-radius: 4px;
+  padding: 1px 6px; font-size: 11px;
+  margin-left: 6px;
+}
+
+/* ── Reverse DCF extras: TV gauge + implied-g table ────────── */
+.val-rdcf-extras { margin-top: 10px; }
+
+.val-tv-gauge {
+  padding: 10px 12px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.val-tv-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; color: var(--muted); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.val-tv-pct { font-size: 16px; font-weight: 800; }
+.val-tv-pct.green { color: var(--green); }
+.val-tv-pct.gold  { color: var(--gold);  }
+.val-tv-pct.red   { color: var(--red);   }
+.val-tv-bar {
+  position: relative; height: 10px;
+  background: rgba(255,255,255,.05);
+  border-radius: 5px; overflow: hidden;
+}
+.val-tv-fill {
+  height: 100%;
+  transition: width .3s ease;
+}
+.val-tv-fill.green { background: linear-gradient(90deg, rgba(16,185,129,.5), var(--green)); }
+.val-tv-fill.gold  { background: linear-gradient(90deg, rgba(234,179,8,.5),  var(--gold));  }
+.val-tv-fill.red   { background: linear-gradient(90deg, rgba(239,68,68,.5),  var(--red));   }
+.val-tv-80line {
+  position: absolute; top: 0; left: 80%;
+  width: 2px; height: 100%;
+  background: rgba(239,68,68,.6);
+  box-shadow: 0 0 4px rgba(239,68,68,.6);
+}
+.val-tv-warn {
+  margin-top: 6px; padding: 6px 10px; font-size: 11px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.25);
+  border-radius: 4px;
+  color: #fca5a5;
+}
+.val-tv-note {
+  margin-top: 6px; font-size: 11px; color: var(--muted);
+}
+
+.val-impl-wrap {
+  padding: 10px 12px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.val-impl-title {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.val-impl-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.val-impl-table th {
+  text-align: left; padding: 4px 8px;
+  font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.val-impl-table td {
+  padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.val-impl-table tr.impl-current {
+  background: rgba(99,102,241,.08);
+}
+.val-impl-table tr.impl-current td { font-weight: 700; }
+.val-impl-table td.red   { color: var(--red);   }
+.val-impl-table td.gold  { color: var(--gold);  }
+.val-impl-table td.green { color: var(--green); }
+.val-impl-note {
+  margin-top: 6px; font-size: 10px; color: var(--muted); font-style: italic;
+}
