@@ -433,6 +433,7 @@ function _stockHeaderHTML(d) {
         ${_tagHTML('Sector', d.sector,   `Industry group: ${d.industry}. Used to calibrate fair-value multiples (target P/E, EV/EBITDA, P/S defaults).`)}
         ${_tagHTML('Mkt Cap', d.market_cap_fmt, 'Market capitalization = current price × shares outstanding. Proxy for company size and liquidity.')}
         ${_betaTag(d)}
+        ${_waccTag(d)}
         ${_peTag(d)}
         ${_psTag(d)}
         ${_evEbitdaTag(d)}
@@ -478,6 +479,30 @@ function _betaTag(d) {
     `Beta = stock's historical sensitivity to market returns.\n` +
     `β = 1.0 → moves with market. β > 1 → amplifies. β < 1 → dampens.\n\n${flavor}\n\n` +
     `Used to compute cost of equity (WACC = Rf + β × ERP).`, cls);
+}
+
+function _waccTag(d) {
+  const wacc = d.wacc_suggestion;
+  if (wacc === undefined || wacc === null) return '';
+  const wd = d.wacc_detail || {};
+  let tip;
+  if (wd.ke !== undefined) {
+    tip = `WACC = ${wacc}% — Weighted Average Cost of Capital\n\n` +
+      `CAPM Cost of Equity (Ke):\n` +
+      `  Rf ${wd.rf}% + β ${wd.beta} × ERP ${wd.erp}% = ${wd.ke}%\n\n` +
+      `Cost of Debt (Kd, pre-tax): ${wd.kd_pretax}%\n` +
+      `Cost of Debt (after-tax):   ${wd.kd_aftertax}%\n\n` +
+      `Capital Structure:\n` +
+      `  Equity weight: ${wd.weight_equity}%\n` +
+      `  Debt weight:   ${wd.weight_debt}%\n` +
+      `  Tax rate:      ${wd.tax_rate_pct}%\n\n` +
+      `WACC = ${wd.weight_equity}% × ${wd.ke}% + ${wd.weight_debt}% × ${wd.kd_pretax}% × (1 − ${wd.tax_rate_pct}%)\n     = ${wacc}%\n\n` +
+      `Country ERP (${wd.country}): ${wd.erp}%  •  Rf: ${wd.rf}% (10-yr US Treasury)`;
+  } else {
+    tip = `WACC = ${wacc}% — used as discount rate in DCF/EPV models.\n\nWACC breakdown unavailable — using fallback estimate.`;
+  }
+  const cls = wacc < 7 ? 'green' : wacc > 11 ? 'red' : '';
+  return _tagHTML('WACC', `${wacc}%`, tip, cls);
 }
 
 function _peTag(d) {
@@ -961,26 +986,50 @@ function _dcfCardHTML(tk, d) {
   const fcfHistory = fcfData.length
     ? `${cagrHTML}
        <table class="val-fcf-table">
-        <thead><tr><th>Year</th><th>Op. Cash Flow ($M)</th><th>CapEx ($M)</th><th>FCF ($M)</th><th>YoY Growth</th></tr></thead>
+        <thead><tr>
+          <th>Year</th>
+          <th>Op. CF ($M)</th>
+          <th>CapEx ($M)</th>
+          <th>FCF ($M)</th>
+          <th title="Stock-Based Compensation added back via cashflow">SBC ($M)</th>
+          <th title="Free Cash Flow minus Stock-Based Compensation — Buffett's owner earnings approximation">Owner Earnings ($M)</th>
+          <th>YoY (FCF)</th>
+        </tr></thead>
         <tbody>${fcfData.map(r => `
-          <tr><td>${r.year}</td><td>${r.op_cf_m.toLocaleString()}</td>
-          <td class="neg">${r.capex_m.toLocaleString()}</td>
-          <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td>
-          <td>${fmtYoY(r)}</td></tr>`).join('')}
+          <tr>
+            <td>${r.year}</td>
+            <td>${(r.op_cf_m ?? 0).toLocaleString()}</td>
+            <td class="neg">${(r.capex_m ?? 0).toLocaleString()}</td>
+            <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td>
+            <td class="neg">${r.sbc_m ? r.sbc_m.toLocaleString() : '—'}</td>
+            <td class="${(r.owner_earnings_m ?? r.fcf_m) >= 0 ? 'pos' : 'neg'}">${r.owner_earnings_m !== undefined ? r.owner_earnings_m.toLocaleString() : '—'}</td>
+            <td>${fmtYoY(r)}</td>
+          </tr>`).join('')}
         </tbody></table>`
     : `<div class="val-note" style="margin-bottom:8px;">No historical cash flow data available.</div>`;
+
+  // Owner-earnings fill button helper (inline JS)
+  const oeBtn = d.owner_earnings_m !== undefined
+    ? `<button class="val-oe-btn" onclick="document.getElementById('${tk}-dcf-fcf').value='${d.owner_earnings_m}';document.getElementById('${tk}-dcf-fcf').dispatchEvent(new Event('input'));" title="Switch base cash flow to Owner Earnings (FCF − SBC ≈ Buffett's owner earnings)">Use Owner Earnings (${d.owner_earnings_m}M)</button>`
+    : '';
+  const fcffNote = `<div class="val-note" style="margin-bottom:4px;">
+    Model: FCFF discounted at WACC → Enterprise Value → subtract Net Debt → Equity Value ÷ Shares.
+    ${oeBtn}
+  </div>`;
 
   const body = `
     ${fcfHistory}
     <div id="mchart-${tk}-dcf" class="val-mchart"></div>
+    ${fcffNote}
     <div class="val-inputs-grid">
-      ${_inp(`${tk}-dcf-fcf`,  'FCF — Latest Year ($M)', d.fcf_total_m,   'Total free cash flow, most recent year', '1')}
-      ${_inp(`${tk}-dcf-shares`, 'Shares Outstanding (M)', d.shares_m, 'Total diluted shares outstanding', '0.1', '0.001')}
-      ${_inp(`${tk}-dcf-g1`,   'Growth Yr 1–5 (%)', g1,              'Expected annual FCF growth, first 5 years', '0.5', '-30', '80')}
-      ${_inp(`${tk}-dcf-g2`,   'Growth Yr 6–10 (%)', g2,             'Slower growth phase, years 6–10', '0.5', '-20', '50')}
-      ${_inp(`${tk}-dcf-tg`,   'Terminal Growth (%)', '2.5',          'Perpetual growth after yr 10 (≈ GDP)', '0.1', '0', '5')}
-      ${_inp(`${tk}-dcf-wacc`, 'WACC (%)', d.wacc_suggestion,        'Weighted avg cost of capital (from beta)', '0.1', '3', '30')}
-      ${_inp(`${tk}-dcf-mos`,  'Margin of Safety (%)', '15',          'Discount applied to final DCF value', '1', '0', '50')}
+      ${_inp(`${tk}-dcf-fcf`,     'FCFF — Latest Year ($M)',  d.fcff_m ?? d.fcf_total_m, 'Free Cash Flow to Firm (OCF + after-tax interest − CapEx). Drives Enterprise Value.', '1')}
+      ${_inp(`${tk}-dcf-netdebt`, 'Net Debt ($M)',            d.net_debt_m, 'Total debt minus cash. Subtracted from EV to get equity value.', '1')}
+      ${_inp(`${tk}-dcf-shares`,  'Shares Outstanding (M)',   d.shares_m,   'Total diluted shares outstanding', '0.1', '0.001')}
+      ${_inp(`${tk}-dcf-g1`,      'Growth Yr 1–5 (%)',        g1,           'Expected annual FCFF growth, first 5 years', '0.5', '-30', '80')}
+      ${_inp(`${tk}-dcf-g2`,      'Growth Yr 6–10 (%)',       g2,           'Slower growth phase, years 6–10', '0.5', '-20', '50')}
+      ${_inp(`${tk}-dcf-tg`,      'Terminal Growth (%)',      '2.5',        'Perpetual growth after yr 10 (≈ GDP)', '0.1', '0', '5')}
+      ${_inp(`${tk}-dcf-wacc`,    'WACC (%)',                 d.wacc_suggestion, 'Weighted avg cost of capital — discounts FCFF to Enterprise Value', '0.1', '3', '30')}
+      ${_inp(`${tk}-dcf-mos`,     'Margin of Safety (%)',     '15',         'Discount applied to final equity value', '1', '0', '50')}
     </div>`;
 
   return _cardWrap('dcf', tk, 'Discounted Cash Flow (DCF)',
@@ -992,13 +1041,14 @@ function _dcfCardHTML(tk, d) {
 function _reverseDcfCardHTML(tk, d) {
   const body = `
     <div class="val-note" style="margin-bottom:8px;">
-      Solves for the FCF growth rate the current market price is pricing in. High implied growth = priced for perfection.
+      Solves for the FCFF growth rate implied by today's price. Target = Price + Net Debt/Share (i.e. solves for Enterprise Value). High implied growth = priced for perfection.
     </div>
     <div class="val-inputs-grid">
-      ${_inp(`${tk}-rdcf-fcf`,   'FCF — Latest Year ($M)', d.fcf_total_m, 'Total free cash flow, most recent year', '1')}
-      ${_inp(`${tk}-rdcf-shares`, 'Shares Outstanding (M)', d.shares_m, 'Diluted shares outstanding', '0.1', '0.001')}
-      ${_inp(`${tk}-rdcf-wacc`,  'WACC (%)', d.wacc_suggestion, 'Discount rate', '0.1', '3', '30')}
-      ${_inp(`${tk}-rdcf-tg`,    'Terminal Growth (%)', '2.5', 'Perpetual growth after yr 10', '0.1', '0', '5')}
+      ${_inp(`${tk}-rdcf-fcf`,     'FCFF — Latest Year ($M)', d.fcff_m ?? d.fcf_total_m, 'Free Cash Flow to Firm — same as DCF base', '1')}
+      ${_inp(`${tk}-rdcf-netdebt`, 'Net Debt ($M)',            d.net_debt_m, 'Added to price to target Enterprise Value', '1')}
+      ${_inp(`${tk}-rdcf-shares`,  'Shares Outstanding (M)',   d.shares_m, 'Diluted shares outstanding', '0.1', '0.001')}
+      ${_inp(`${tk}-rdcf-wacc`,    'WACC (%)',                 d.wacc_suggestion, 'Discount rate', '0.1', '3', '30')}
+      ${_inp(`${tk}-rdcf-tg`,      'Terminal Growth (%)',      '2.5', 'Perpetual growth after yr 10', '0.1', '0', '5')}
     </div>
     <div class="val-two-results">
       <div class="val-two-item"><span class="val-two-label">Implied 5-yr Growth</span><span class="val-card-result sml" id="res-${tk}-rdcf-g">—</span></div>
@@ -1211,26 +1261,30 @@ function _recalcTicker(tk) {
   const results = {};
 
   // DCF
-  const dcfFcf   = _gv(`${tk}-dcf-fcf`);
-  const dcfShares = Math.max(_gv(`${tk}-dcf-shares`), 0.001);
-  const dcfFcfPs = dcfShares > 0 ? (dcfFcf * 1e6) / (dcfShares * 1e6) : 0;
+  const dcfFcf     = _gv(`${tk}-dcf-fcf`);
+  const dcfNetDebt = _gv(`${tk}-dcf-netdebt`);  // $M
+  const dcfShares  = Math.max(_gv(`${tk}-dcf-shares`), 0.001);
+  const dcfFcfPs   = dcfShares > 0 ? (dcfFcf    * 1e6) / (dcfShares * 1e6) : 0;
+  const dcfNdPs    = dcfShares > 0 ? (dcfNetDebt * 1e6) / (dcfShares * 1e6) : 0;
   const dcfG1   = _gv(`${tk}-dcf-g1`)   / 100;
   const dcfG2   = _gv(`${tk}-dcf-g2`)   / 100;
   const dcfTg   = _gv(`${tk}-dcf-tg`)   / 100;
   const dcfWacc = _gv(`${tk}-dcf-wacc`) / 100;
   const dcfMos  = _gv(`${tk}-dcf-mos`)  / 100;
-  results.dcf = _calcDCF(dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos);
+  results.dcf = _calcDCF(dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, dcfNdPs);
   _setResult(`res-${tk}-dcf`, results.dcf, cur);
   _setUD(`ud-${tk}-dcf`, results.dcf, price);
-  _setDCFWorkings(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, results.dcf, cur);
+  _setDCFWorkings(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, results.dcf, cur, dcfNdPs);
 
   // Reverse DCF — solves for implied growth, NOT added to `results` (excluded from compare chart)
-  const rdFcf = _gv(`${tk}-rdcf-fcf`);
-  const rdSh  = Math.max(_gv(`${tk}-rdcf-shares`), 0.001);
-  const rdFcfPs = rdSh > 0 ? (rdFcf * 1e6) / (rdSh * 1e6) : 0;
+  const rdFcf     = _gv(`${tk}-rdcf-fcf`);
+  const rdNetDebt = _gv(`${tk}-rdcf-netdebt`);
+  const rdSh      = Math.max(_gv(`${tk}-rdcf-shares`), 0.001);
+  const rdFcfPs   = rdSh > 0 ? (rdFcf    * 1e6) / (rdSh * 1e6) : 0;
+  const rdNdPs    = rdSh > 0 ? (rdNetDebt * 1e6) / (rdSh * 1e6) : 0;
   const rdWacc  = _gv(`${tk}-rdcf-wacc`) / 100;
   const rdTg    = _gv(`${tk}-rdcf-tg`)   / 100;
-  const impliedG = _calcReverseDCF(rdFcfPs, rdWacc, rdTg, price);
+  const impliedG = _calcReverseDCF(rdFcfPs, rdWacc, rdTg, price, rdNdPs);
   const gEl = document.getElementById(`res-${tk}-rdcf-g`);
   const nEl = document.getElementById(`res-${tk}-rdcf-note`);
   const mainEl = document.getElementById(`res-${tk}-rdcf`);
@@ -1353,14 +1407,17 @@ function _recalcTicker(tk) {
 
 // ── Core math ─────────────────────────────────────────────────────────────────
 
-function _calcDCF(fcfPs, g1, g2, tg, wacc, mos) {
-  if (!fcfPs || wacc <= tg || wacc <= 0) return null;
-  let pv = 0, cf = fcfPs;
+function _calcDCF(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare) {
+  // Discounts FCFF at WACC → Enterprise Value per share.
+  // Then subtracts net-debt-per-share to get Equity Value, then applies MoS.
+  if (!fcffPs || wacc <= tg || wacc <= 0) return null;
+  let pv = 0, cf = fcffPs;
   for (let y = 1; y <= 5;  y++) { cf *= (1 + g1); pv += cf / Math.pow(1 + wacc, y); }
   for (let y = 6; y <= 10; y++) { cf *= (1 + g2); pv += cf / Math.pow(1 + wacc, y); }
   const tv = (cf * (1 + tg)) / (wacc - tg);
-  pv += tv / Math.pow(1 + wacc, 10);
-  return pv > 0 ? r2(pv * (1 - mos)) : null;
+  pv += tv / Math.pow(1 + wacc, 10);          // pv = Enterprise Value per share
+  const equityPs = pv - (netDebtPerShare || 0); // EV → Equity
+  return equityPs > 0 ? r2(equityPs * (1 - mos)) : null;
 }
 
 function _calcEPV(ebitM, tax, wacc, netDebtM, sharesM) {
@@ -1382,19 +1439,21 @@ function _calcEVMult(earnM, mult, netDebtM, sharesM) {
   return equity > 0 ? r2((equity * 1e6) / (sharesM * 1e6)) : null;
 }
 
-function _calcReverseDCF(fcfPs, wacc, tg, targetPrice) {
-  if (!fcfPs || fcfPs <= 0 || wacc <= tg || wacc <= 0 || !targetPrice || targetPrice <= 0) return null;
-  // Bisect over g1 in [-0.30, 1.00] to find the growth rate that produces targetPrice
+function _calcReverseDCF(fcffPs, wacc, tg, targetPrice, netDebtPerShare) {
+  // Bisects over g to find growth rate that makes DCF EV/share equal to
+  // targetPrice + netDebtPerShare (i.e. backs out implied FCFF growth from market price).
+  if (!fcffPs || fcffPs <= 0 || wacc <= tg || wacc <= 0 || !targetPrice || targetPrice <= 0) return null;
+  const targetEV = targetPrice + (netDebtPerShare || 0); // solve at EV level
   let lo = -0.30, hi = 1.00;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
     const g1 = mid, g2 = mid * 0.6;
-    let pv = 0, cf = fcfPs;
+    let pv = 0, cf = fcffPs;
     for (let y = 1; y <= 5;  y++) { cf *= (1 + g1); pv += cf / Math.pow(1 + wacc, y); }
     for (let y = 6; y <= 10; y++) { cf *= (1 + g2); pv += cf / Math.pow(1 + wacc, y); }
     const tv = (cf * (1 + tg)) / (wacc - tg);
     pv += tv / Math.pow(1 + wacc, 10);
-    if (pv > targetPrice) hi = mid; else lo = mid;
+    if (pv > targetEV) hi = mid; else lo = mid;
   }
   const result = (lo + hi) / 2;
   if (result <= -0.299 || result >= 0.999) return null;
@@ -1419,26 +1478,29 @@ function _steps(arr) {
      ${label ? `<div class="step-label">${label}</div>` : ''}</div></div>`).join('');
 }
 
-function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur) {
+function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur, netDebtPerShare) {
   const el = document.getElementById(`wp-${tk}-dcf`); if (!el) return;
   if (!result) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute — check inputs.</div>'; return; }
+  const ndPs = netDebtPerShare || 0;
   let cf = fcfPs, pv5 = 0;
   const yr5 = [];
   for (let y = 1; y <= 5; y++) { cf *= (1+g1); pv5 += cf/Math.pow(1+wacc,y); yr5.push(cf); }
   let pv10 = 0;
   const yr10 = [];
   for (let y = 6; y <= 10; y++) { cf *= (1+g2); pv10 += cf/Math.pow(1+wacc,y); yr10.push(cf); }
-  const tv = (cf*(1+tg))/(wacc-tg);
+  const tv   = (cf*(1+tg))/(wacc-tg);
   const pvTv = tv/Math.pow(1+wacc,10);
-  const total = pv5 + pv10 + pvTv;
-  const final = total * (1 - mos);
+  const ev   = pv5 + pv10 + pvTv;             // Enterprise Value per share
+  const eq   = ev - ndPs;                      // Equity Value per share
+  const final = eq * (1 - mos);
   el.innerHTML = _steps([
-    ['1', `Base FCF/share = ${_fp(fcfPs, cur)}`, 'Starting free cash flow per share'],
-    ['2', `Year 1–5 FCFs: ${yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}% / yr → PV sum = ${_fp(pv5, cur)}`],
-    ['3', `Year 6–10 FCFs: ${yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}% / yr → PV sum = ${_fp(pv10, cur)}`],
-    ['4', `Terminal Value (yr 10) = ${_fp(cf,cur)} × (1 + ${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}% − ${(tg*100).toFixed(1)}%) = ${_fp(tv, cur)}`, `Discounted back: PV(TV) = ${_fp(pvTv, cur)}`],
-    ['5', `Total intrinsic value = ${_fp(pv5,cur)} + ${_fp(pv10,cur)} + ${_fp(pvTv,cur)} = ${_fp(total, cur)}`, ''],
-    ['6', `After ${(mos*100).toFixed(0)}% margin of safety: ${_fp(total,cur)} × ${(1-mos).toFixed(2)} = ${_fp(final, cur)}`, 'Final DCF fair value'],
+    ['1', `Base FCFF/share = ${_fp(fcfPs, cur)}`, 'Free Cash Flow to Firm per share — before debt service'],
+    ['2', `Year 1–5 FCFFs: ${yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}% / yr → PV sum = ${_fp(pv5, cur)}`],
+    ['3', `Year 6–10 FCFFs: ${yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}% / yr → PV sum = ${_fp(pv10, cur)}`],
+    ['4', `Terminal Value (yr 10) = ${_fp(cf,cur)} × (1+${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}%−${(tg*100).toFixed(1)}%) = ${_fp(tv, cur)}`, `PV(TV) = ${_fp(pvTv, cur)}`],
+    ['5', `Enterprise Value / share = ${_fp(pv5,cur)} + ${_fp(pv10,cur)} + ${_fp(pvTv,cur)} = ${_fp(ev, cur)}`, 'Sum of discounted FCFFs + terminal value'],
+    ['6', `Equity Value / share = EV − Net Debt/share = ${_fp(ev,cur)} − ${_fp(ndPs,cur)} = ${_fp(eq, cur)}`, 'EV → Equity bridge'],
+    ['7', `After ${(mos*100).toFixed(0)}% margin of safety: ${_fp(eq,cur)} × ${(1-mos).toFixed(2)} = ${_fp(final, cur)}`, 'Final DCF fair value'],
   ]);
 }
 

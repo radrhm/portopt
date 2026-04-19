@@ -1,6 +1,7 @@
 """Equity valuation — fetch financials via yfinance."""
 
 import logging
+from .wacc import compute_wacc, fetch_risk_free_rate
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ def fetch_financials(ticker: str) -> dict:
     # yfinance provides up to 4 years of annual data reliably
     historical_fcf = []
     fcf_total_latest = float(info.get("freeCashflow") or 0)
+    dna_latest_m    = 0.0   # D&A most-recent year ($M)
+    sbc_latest_m    = 0.0   # Stock-Based Comp most-recent year ($M)
     try:
         cf = t.cashflow
         if cf is not None and not cf.empty:
@@ -38,7 +41,7 @@ def fetch_financials(ticker: str) -> dict:
                     yr = col.year if hasattr(col, 'year') else int(str(col)[:4])
                 except Exception:
                     continue
-                op_cf, capex = 0.0, 0.0
+                op_cf, capex, dna, sbc = 0.0, 0.0, 0.0, 0.0
                 for label in ("Operating Cash Flow", "Cash Flow From Continuing Operating Activities"):
                     if label in cf.index:
                         v = cf.loc[label, col]
@@ -52,23 +55,46 @@ def fetch_financials(ticker: str) -> dict:
                         if not _isnan(v):
                             capex = float(v)
                             break
+                for label in ("Depreciation And Amortization", "Depreciation Amortization Depletion",
+                               "Depreciation", "Amortization"):
+                    if label in cf.index:
+                        v = cf.loc[label, col]
+                        if not _isnan(v):
+                            dna = abs(float(v))   # always positive
+                            break
+                for label in ("Stock Based Compensation", "Share Based Compensation Expense",
+                               "Stock Based Compensation Expense"):
+                    if label in cf.index:
+                        v = cf.loc[label, col]
+                        if not _isnan(v):
+                            sbc = abs(float(v))
+                            break
                 fcf = op_cf + capex   # capex is stored as negative
+                # Owner Earnings ≈ FCF − SBC
+                # (maintenance capex ≈ D&A, so D&A adds back; they roughly cancel)
+                owner_earnings = fcf - sbc
                 historical_fcf.append({
-                    "year":    yr,
-                    "op_cf_m": round(op_cf  / 1e6, 1),
-                    "capex_m": round(capex  / 1e6, 1),
-                    "fcf_m":   round(fcf    / 1e6, 1),
+                    "year":             yr,
+                    "op_cf_m":          round(op_cf          / 1e6, 1),
+                    "capex_m":          round(capex          / 1e6, 1),
+                    "fcf_m":            round(fcf            / 1e6, 1),
+                    "dna_m":            round(dna            / 1e6, 1),
+                    "sbc_m":            round(sbc            / 1e6, 1),
+                    "owner_earnings_m": round(owner_earnings / 1e6, 1),
                 })
             historical_fcf.sort(key=lambda x: -x["year"])
             if historical_fcf:
                 fcf_total_latest = historical_fcf[0]["fcf_m"] * 1e6
+                dna_latest_m     = historical_fcf[0]["dna_m"]
+                sbc_latest_m     = historical_fcf[0]["sbc_m"]
     except Exception as e:
         logger.warning("Could not parse cashflow: %s", e)
 
     fcf_per_share = fcf_total_latest / shares if shares else 0
 
     # ── Income statement ─────────────────────────────────────────
-    ebit_m    = 0.0
+    ebit_m             = 0.0
+    interest_expense_m = 0.0   # absolute value, $M
     revenue_m = float((info.get("totalRevenue") or 0)) / 1e6
     tax_rate  = 0.21
     eps_ttm   = float(info.get("trailingEps")  or 0)
@@ -89,6 +115,14 @@ def fetch_financials(ticker: str) -> dict:
                     v = fin.loc[label, col0]
                     if not _isnan(v):
                         revenue_m = float(v) / 1e6
+                        break
+            # Interest expense (absolute value)
+            for label in ("Interest Expense", "Interest Expense Non Operating",
+                           "Net Interest Income"):
+                if label in fin.index:
+                    v = fin.loc[label, col0]
+                    if not _isnan(v):
+                        interest_expense_m = abs(float(v)) / 1e6
                         break
             # Effective tax rate from net income and pretax income
             pre_tax, net_inc = None, None
@@ -158,8 +192,32 @@ def fetch_financials(ticker: str) -> dict:
     earnings_growth_pct = float(eg) * 100 if eg else 10.0
     earnings_growth_pct = max(-50.0, min(earnings_growth_pct, 60.0))
 
-    # ── WACC suggestion ───────────────────────────────────────────
-    wacc = round(4.3 + beta * 5.5, 1)
+    # ── WACC — proper CAPM + capital-structure weighting ──────────
+    country_str = info.get("country") or "United States"
+    try:
+        wacc_detail = compute_wacc(
+            beta               = beta,
+            market_cap_m       = mktcap / 1e6,
+            total_debt_m       = total_debt  / 1e6,
+            interest_expense_m = interest_expense_m,
+            tax_rate           = tax_rate,
+            country            = country_str,
+        )
+        wacc = wacc_detail["wacc"]
+    except Exception as e:
+        logger.warning("compute_wacc failed: %s", e)
+        wacc        = round(4.3 + beta * 5.5, 1)
+        wacc_detail = {}
+
+    # ── FCFF (Free Cash Flow to Firm) — for EV-based DCF ─────────
+    # FCFF = OCF + Interest×(1−t) − Capex
+    # Since our FCF already = OCF + capex (capex negative), we add back after-tax interest
+    fcf_latest_m  = round(fcf_total_latest / 1e6, 1)
+    fcff_latest_m = round(fcf_latest_m + interest_expense_m * (1.0 - tax_rate), 1)
+
+    # Owner earnings ≈ FCF − SBC
+    owner_earnings_latest_m  = round(fcf_latest_m - sbc_latest_m, 1)
+    owner_earnings_per_share = (owner_earnings_latest_m * 1e6 / shares) if shares else 0
 
     # ── Sector P/E & EV/EBITDA suggestions ───────────────────────
     pe_sector_defaults = {
@@ -464,10 +522,17 @@ def fetch_financials(ticker: str) -> dict:
         "fcf_years":         len(historical_fcf),
 
         # DCF inputs
-        "fcf_total_m":       round(fcf_total_latest / 1e6, 1),
-        "fcf_per_share":     round(fcf_per_share, 2),
-        "wacc_suggestion":   wacc,
-        "earnings_growth_pct": round(earnings_growth_pct, 1),
+        "fcf_total_m":            round(fcf_total_latest / 1e6, 1),
+        "fcf_per_share":          round(fcf_per_share, 2),
+        "fcff_m":                 fcff_latest_m,
+        "dna_m":                  round(dna_latest_m, 1),
+        "sbc_m":                  round(sbc_latest_m, 1),
+        "interest_expense_m":     round(interest_expense_m, 1),
+        "owner_earnings_m":       owner_earnings_latest_m,
+        "owner_earnings_per_share": round(owner_earnings_per_share, 2),
+        "wacc_suggestion":        wacc,
+        "wacc_detail":            wacc_detail,
+        "earnings_growth_pct":    round(earnings_growth_pct, 1),
 
         # DDM
         "dividend_annual":  round(div_rate,  2),
