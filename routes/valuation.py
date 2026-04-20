@@ -25,6 +25,30 @@ def get_financials():
         return jsonify({"error": f"Failed to fetch data: {str(e)}"}), 500
 
 
+# ── C4: PEER COMPS ────────────────────────────────────────────────────────────
+
+_PEER_CACHE: dict = {}     # { ticker: (timestamp, payload) }
+_PEER_TTL   = 60 * 60 * 6  # 6 hours
+
+@valuation_bp.route("/api/valuation/peers/<ticker>")
+def get_peers(ticker):
+    import time
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return jsonify({"error": "ticker is required"}), 400
+    now = time.time()
+    hit = _PEER_CACHE.get(sym)
+    if hit and (now - hit[0]) < _PEER_TTL:
+        return jsonify(hit[1])
+    try:
+        from services.peers import fetch_peer_metrics
+        data = fetch_peer_metrics(sym)
+        _PEER_CACHE[sym] = (now, data)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch peers: {e}"}), 500
+
+
 # ── AI BUSINESS ANALYSIS ──────────────────────────────────────────────────────
 
 @valuation_bp.route("/api/valuation/analysis", methods=["POST"])

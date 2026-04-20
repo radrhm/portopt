@@ -1121,17 +1121,38 @@ function _reverseDcfCardHTML(tk, d) {
 
 // 2. EPV ───────────────────────────────────────────────────────────────────────
 function _epvCardHTML(tk, d) {
+  const normEbit = (d.normalized_ebit_m || d.ebit_m || 0);
+  const avgMargin = d.avg_ebit_margin_pct || 0;
   const body = `
     <div id="mchart-${tk}-epv" class="val-mchart"></div>
     <div class="val-inputs-grid">
-      ${_inp(`${tk}-epv-ebit`,  'EBIT ($M)', d.ebit_m, 'Earnings before interest & tax', '1')}
+      ${_inp(`${tk}-epv-ebit`,  'Normalized EBIT ($M)', normEbit.toFixed ? normEbit.toFixed(0) : normEbit, `5-10yr avg EBIT margin (${avgMargin.toFixed(1)}%) × current revenue`, '1')}
       ${_inp(`${tk}-epv-tax`,   'Tax Rate (%)', d.tax_rate_pct, 'Effective corporate tax rate', '0.5', '0', '50')}
       ${_inp(`${tk}-epv-wacc`,  'WACC (%)', d.wacc_suggestion, 'Discount rate', '0.1', '3', '30')}
+      ${_inp(`${tk}-epv-mcapex`, 'Maintenance Capex ($M)', (d.maintenance_capex_m || 0).toFixed ? d.maintenance_capex_m.toFixed(0) : (d.maintenance_capex_m || 0), 'Rule of thumb: ≈ D&A. Deducted from NOPAT.', '1')}
       ${_inp(`${tk}-epv-netdebt`, 'Net Debt ($M)', d.net_debt_m, 'Total debt minus cash', '1')}
       ${_inp(`${tk}-epv-shares`, 'Shares (M)', d.shares_m, 'Diluted shares outstanding', '0.1', '0.001')}
+      ${_inp(`${tk}-epv-assetval`, 'Asset Reprod. ($M)', (d.asset_reproduction_m || 0).toFixed ? d.asset_reproduction_m.toFixed(0) : (d.asset_reproduction_m || 0), 'Tangible book + partial intangibles/goodwill — Greenwald replacement cost', '10')}
+    </div>
+    <div class="val-epv-trio" id="epv-trio-${tk}">
+      <div class="val-epv-trio-item">
+        <div class="val-epv-trio-label">EPV / share</div>
+        <div class="val-epv-trio-value" id="epv-trio-epv-${tk}">—</div>
+        <div class="val-epv-trio-hint">Earnings power, no growth</div>
+      </div>
+      <div class="val-epv-trio-item">
+        <div class="val-epv-trio-label">Asset Value / share</div>
+        <div class="val-epv-trio-value" id="epv-trio-asset-${tk}">—</div>
+        <div class="val-epv-trio-hint">Reproduction cost of assets</div>
+      </div>
+      <div class="val-epv-trio-item">
+        <div class="val-epv-trio-label">Moat Premium</div>
+        <div class="val-epv-trio-value" id="epv-trio-moat-${tk}">—</div>
+        <div class="val-epv-trio-hint" id="epv-trio-moat-hint-${tk}">(EPV − Asset) / EPV</div>
+      </div>
     </div>`;
   return _cardWrap('epv', tk, 'Earnings Power Value (EPV)',
-    'Assumes no growth — values the business on current normalised earnings capacity only',
+    'Greenwald 3-number model: EPV (no growth) vs Asset Reproduction Value — gap = economic moat',
     body);
 }
 
@@ -1140,16 +1161,48 @@ function _ddmCardHTML(tk, d) {
   const noDivNote = (!d.dividend_annual || d.dividend_annual <= 0)
     ? `<div class="val-note" style="margin-bottom:8px;">⚠️ This stock pays no dividend. DDM is not applicable — result will be N/A.</div>`
     : '';
+  const gHigh = Math.min(d.earnings_growth_pct * 0.6, 12).toFixed(1);
+  const gFade = Math.min(d.earnings_growth_pct * 0.3, 6).toFixed(1);
+  const ke    = d.cost_of_equity_pct || d.wacc_suggestion;
+
+  const payoutPct = d.payout_ratio_pct;
+  const payoutWarn = (payoutPct !== null && payoutPct !== undefined && payoutPct > 100)
+    ? `<div class="val-warn-inline" style="margin-top:6px;">⚠️ Payout ratio ${payoutPct.toFixed(0)}% > 100% — dividend exceeds earnings. Likely unsustainable unless earnings recover or debt funds the gap.</div>`
+    : '';
+  const payoutLine = (payoutPct !== null && payoutPct !== undefined)
+    ? `<div class="val-ddm-meta">Payout ratio: <strong>${payoutPct.toFixed(0)}%</strong></div>`
+    : '';
+
+  const divYld  = d.dividend_yield || 0;
+  const bbkYld  = d.buyback_yield_pct || 0;
+  const totalYld = d.total_shareholder_yield_pct || 0;
+  const yieldRow = `
+    <div class="val-yield-row">
+      <div class="val-yield-item"><div class="val-yield-label">Dividend yield</div><div class="val-yield-value">${divYld.toFixed(2)}%</div></div>
+      <div class="val-yield-item"><div class="val-yield-label">Buyback yield</div><div class="val-yield-value">${bbkYld.toFixed(2)}%</div></div>
+      <div class="val-yield-item val-yield-total"><div class="val-yield-label">Total shareholder yield</div><div class="val-yield-value">${totalYld.toFixed(2)}%</div></div>
+    </div>`;
+
   const body = `
     ${noDivNote}
+    ${yieldRow}
+    ${payoutLine}
     <div id="mchart-${tk}-ddm" class="val-mchart"></div>
-    <div class="val-inputs-grid col2">
-      ${_inp(`${tk}-ddm-div`, 'Annual Dividend / Share ($)', d.dividend_annual || 0, 'Last declared annual dividend per share', '0.01', '0')}
-      ${_inp(`${tk}-ddm-g`,   'Dividend Growth Rate (%)', Math.min(d.earnings_growth_pct * 0.4, 8).toFixed(1), 'Long-term expected annual dividend growth', '0.5', '0', '20')}
-      ${_inp(`${tk}-ddm-r`,   'Required Return (%)', d.wacc_suggestion, 'Your minimum acceptable annual return (cost of equity)', '0.1', '1', '30')}
-    </div>`;
-  return _cardWrap('ddm', tk, 'Dividend Discount Model (DDM)',
-    'Gordon Growth Model: P = D₁ ÷ (r − g) — present value of all future dividends',
+    <div class="val-ddm-stages">
+      <div class="val-ddm-stage-title">Stage 1 · High growth (years 1–5)</div>
+      <div class="val-ddm-stage-title">Stage 2 · Fade (years 6–10)</div>
+      <div class="val-ddm-stage-title">Stage 3 · Terminal (11+)</div>
+    </div>
+    <div class="val-inputs-grid col3">
+      ${_inp(`${tk}-ddm-div`,   'Dividend / Share ($)', d.dividend_annual || 0, 'Last declared annual dividend per share', '0.01', '0')}
+      ${_inp(`${tk}-ddm-g1`,    'High-growth rate (%)', gHigh, 'Stage 1 dividend growth for years 1–5', '0.5', '0', '30')}
+      ${_inp(`${tk}-ddm-g2`,    'Fade-growth rate (%)', gFade, 'Stage 2 dividend growth for years 6–10 (mean-reverts toward terminal)', '0.5', '0', '20')}
+      ${_inp(`${tk}-ddm-tg`,    'Terminal growth (%)', '2.5', 'Stage 3 perpetual growth (cap ≈ long-run GDP)', '0.1', '0', '5')}
+      ${_inp(`${tk}-ddm-r`,     'Cost of Equity (%)',  ke,    'Discount rate = Ke (CAPM), not WACC — you own equity only', '0.1', '1', '30')}
+    </div>
+    ${payoutWarn}`;
+  return _cardWrap('ddm', tk, 'Dividend Discount Model (DDM) — 3-stage',
+    'Multi-stage DDM: high-growth → fade → terminal. Discounts at cost of equity, not WACC.',
     body);
 }
 
@@ -1159,10 +1212,17 @@ function _peCardHTML(tk, d) {
   const body = `
     <div id="mchart-${tk}-pe" class="val-mchart"></div>
     ${_historicalBandHTML(tk, 'pe')}
+    <div class="val-peers-wrap" id="peers-${tk}">
+      <div class="val-peers-head">
+        <span class="val-peers-title">Peer comps</span>
+        <button class="val-peers-load" id="peers-load-${tk}" onclick="_loadPeers('${tk}')">Load peers</button>
+      </div>
+      <div class="val-peers-body" id="peers-body-${tk}"></div>
+    </div>
     <div class="val-inputs-grid col2">
       ${_inp(`${tk}-pe-epsttm`, 'EPS TTM ($)', d.eps_ttm,    'Trailing twelve months earnings per share', '0.01')}
       ${_inp(`${tk}-pe-epsfwd`, 'EPS Forward ($)', d.eps_forward, 'Next twelve months consensus estimate', '0.01')}
-      ${_inp(`${tk}-pe-multtm`, 'Target P/E (TTM)', d.sector_pe, 'Sector / historical fair P/E multiple', '0.5', '1')}
+      ${_inp(`${tk}-pe-multtm`, 'Target P/E (TTM)', d.sector_pe, 'Sector / historical / peer-regression fair P/E multiple', '0.5', '1')}
       ${_inp(`${tk}-pe-mulfwd`, 'Target P/E (Fwd)', fwdPe,   'Forward P/E to apply to next-year earnings', '0.5', '1')}
     </div>
     <div class="val-two-results">
@@ -1170,40 +1230,223 @@ function _peCardHTML(tk, d) {
       <div class="val-two-item"><span class="val-two-label">Forward P/E Fair Value</span><span class="val-card-result sml" id="res-${tk}-pe-fwd">—</span></div>
     </div>`;
   return _cardWrap('pe', tk, 'Price / Earnings (P/E)',
-    'Fair value = EPS × target multiple. Shown for both trailing and forward EPS.',
+    'Fair value = EPS × target multiple. Includes peer comps table and regression-based justified P/E.',
     body);
+}
+
+// ── C4: Peer comps loader + renderer ─────────────────────────────────────────
+
+async function _loadPeers(tk) {
+  const btn  = document.getElementById(`peers-load-${tk}`);
+  const body = document.getElementById(`peers-body-${tk}`);
+  if (!body) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  body.innerHTML = '<div class="val-peers-loading">Fetching peers…</div>';
+  try {
+    const res = await fetch(`/api/valuation/peers/${encodeURIComponent(tk)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _renderPeers(tk, data);
+  } catch (e) {
+    body.innerHTML = `<div class="val-peers-err">Peer fetch failed: ${(e && e.message) || 'unknown'}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Reload peers'; }
+  }
+}
+
+function _renderPeers(tk, data) {
+  const body = document.getElementById(`peers-body-${tk}`);
+  if (!body) return;
+  if (!data || !data.peers || data.peers.length === 0) {
+    body.innerHTML = `<div class="val-peers-empty">${data?.message || 'No peer set curated for this ticker.'}</div>`;
+    return;
+  }
+  const fmtPct = v => (v === null || v === undefined) ? '—' : `${(v*100).toFixed(1)}%`;
+  const fmtNum = v => (v === null || v === undefined) ? '—' : v.toFixed(1);
+  const rows = data.peers.map(p => `
+    <tr>
+      <td class="peer-sym">${p.ticker}</td>
+      <td class="peer-name" title="${p.name || ''}">${(p.name || '').slice(0,22)}</td>
+      <td>${fmtNum(p.pe)}</td>
+      <td>${fmtNum(p.fwd_pe)}</td>
+      <td>${fmtPct(p.growth)}</td>
+      <td>${fmtPct(p.roe)}</td>
+      <td>${fmtPct(p.margin)}</td>
+    </tr>`).join('');
+  const s = data.stats || {};
+  const targetRow = data.target ? `
+    <tr class="peer-target">
+      <td class="peer-sym">${data.target.ticker}</td>
+      <td class="peer-name">(target)</td>
+      <td>${fmtNum(data.target.pe)}</td>
+      <td>${fmtNum(data.target.fwd_pe)}</td>
+      <td>${fmtPct(data.target.growth)}</td>
+      <td>${fmtPct(data.target.roe)}</td>
+      <td>${fmtPct(data.target.margin)}</td>
+    </tr>` : '';
+  const medianRow = `
+    <tr class="peer-median">
+      <td class="peer-sym">Median</td>
+      <td></td>
+      <td>${s.median_pe ?? '—'}</td>
+      <td></td>
+      <td>${s.median_growth !== null && s.median_growth !== undefined ? s.median_growth.toFixed(1)+'%' : '—'}</td>
+      <td>${s.median_roe    !== null && s.median_roe    !== undefined ? s.median_roe.toFixed(1)+'%'    : '—'}</td>
+      <td>${s.median_margin !== null && s.median_margin !== undefined ? s.median_margin.toFixed(1)+'%' : '—'}</td>
+    </tr>`;
+
+  const targetPEs = _targetPEOptions(tk, data);
+  const justifiedPE = s.justified_pe;
+  const options = [
+    { label: 'Sector median', value: s.median_pe, hint: `Median of ${s.n_peers || 0} peers` },
+    { label: 'Peer regression', value: justifiedPE, hint: s.regression ? `${s.regression.form}, n=${s.regression.n}` : 'Requires ≥3 clean peers' },
+    { label: 'Historical avg', value: targetPEs.historical, hint: targetPEs.histNote },
+  ];
+  const optHTML = options.map(o => {
+    const v = o.value;
+    const disabled = (v === null || v === undefined);
+    return `
+      <button class="val-peers-opt ${disabled ? 'disabled' : ''}"
+              ${disabled ? 'disabled' : `onclick="_applyTargetPE('${tk}', ${v})"`}>
+        <div class="val-peers-opt-label">${o.label}</div>
+        <div class="val-peers-opt-value">${disabled ? '—' : v.toFixed(1) + '×'}</div>
+        <div class="val-peers-opt-hint">${o.hint || ''}</div>
+      </button>`;
+  }).join('');
+
+  body.innerHTML = `
+    <table class="val-peers-table">
+      <thead>
+        <tr><th>Sym</th><th>Name</th><th>P/E</th><th>Fwd</th><th>Growth</th><th>ROE</th><th>Margin</th></tr>
+      </thead>
+      <tbody>
+        ${targetRow}
+        ${rows}
+        ${medianRow}
+      </tbody>
+    </table>
+    <div class="val-peers-options">
+      <div class="val-peers-options-title">Apply target P/E from:</div>
+      <div class="val-peers-options-row">${optHTML}</div>
+    </div>`;
+}
+
+function _targetPEOptions(tk, data) {
+  // Pull historical P/E average from the current card's d object if available.
+  // We fish it off the cached _vStocks[tk].data so we don't need to round-trip.
+  let historical = null, histNote = 'No P/E history';
+  try {
+    const d = _vStocks[tk]?.data;
+    if (d?.pe_history?.length) {
+      const pes = d.pe_history.map(r => r.pe).filter(v => v && v > 0);
+      if (pes.length >= 3) {
+        const avg = pes.reduce((a,b)=>a+b,0) / pes.length;
+        historical = Math.round(avg * 10) / 10;
+        histNote = `${pes.length}yr avg`;
+      }
+    }
+  } catch {}
+  return { historical, histNote };
+}
+
+function _applyTargetPE(tk, value) {
+  const inp = document.getElementById(`${tk}-pe-multtm`);
+  if (!inp || !value) return;
+  inp.value = value.toFixed ? value.toFixed(1) : value;
+  // Trigger recalc via existing listener
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // 5. EV/EBITDA ─────────────────────────────────────────────────────────────────
 function _evEbitdaCardHTML(tk, d) {
+  const ndAdj = _fullNdAdjustment(d);
   const body = `
     <div id="mchart-${tk}-evda" class="val-mchart"></div>
     ${_historicalBandHTML(tk, 'evda')}
+    ${_evBridgeHTML(tk, 'evda', d)}
     <div class="val-inputs-grid">
       ${_inp(`${tk}-evda-ebitda`, 'EBITDA ($M)', d.ebitda_m, 'Earnings before interest, tax, D&A', '10')}
       ${_inp(`${tk}-evda-mult`,   'Target EV/EBITDA ×', d.sector_ev, 'Sector fair-value multiple', '0.5', '1')}
-      ${_inp(`${tk}-evda-netdebt`, 'Net Debt ($M)', d.net_debt_m, 'Total debt minus cash', '10')}
+      ${_inp(`${tk}-evda-netdebt`, 'Net Debt Adjustment ($M)', ndAdj, 'Full bridge: debt + leases + pension + pref + minority − cash', '10')}
       ${_inp(`${tk}-evda-shares`, 'Shares (M)', d.shares_m, 'To convert equity value to per share', '0.1', '0.001')}
     </div>`;
   return _cardWrap('evda', tk, 'EV / EBITDA',
-    'Target EV = EBITDA × multiple → subtract net debt → divide by shares',
+    'Target EV = EBITDA × multiple → subtract full EV bridge → divide by shares',
     body);
+}
+
+// Helper: full net debt adjustment = EV − Market Cap (falls back to net_debt_m)
+function _fullNdAdjustment(d) {
+  const b = d.ev_bridge;
+  if (b && typeof b.ev_total_m === 'number' && typeof b.market_cap_m === 'number') {
+    return (b.ev_total_m - b.market_cap_m).toFixed(0);
+  }
+  return (d.net_debt_m || 0).toFixed ? d.net_debt_m.toFixed(0) : d.net_debt_m;
 }
 
 // 6. EV/EBIT ───────────────────────────────────────────────────────────────────
 function _evEbitCardHTML(tk, d) {
   const ebitMult = d.sector_ev * 0.8;
+  const ndAdj    = _fullNdAdjustment(d);
   const body = `
     <div id="mchart-${tk}-eveb" class="val-mchart"></div>
+    ${_evBridgeHTML(tk, 'eveb', d)}
     <div class="val-inputs-grid">
       ${_inp(`${tk}-eveb-ebit`,   'EBIT ($M)', d.ebit_m, 'Operating profit (before interest & tax)', '1')}
       ${_inp(`${tk}-eveb-mult`,   'Target EV/EBIT ×', ebitMult.toFixed(1), 'Sector fair-value EV/EBIT multiple', '0.5', '1')}
-      ${_inp(`${tk}-eveb-netdebt`, 'Net Debt ($M)', d.net_debt_m, 'Total debt minus cash', '10')}
+      ${_inp(`${tk}-eveb-netdebt`, 'Net Debt Adjustment ($M)', ndAdj, 'Full bridge: debt + leases + pension + pref + minority − cash', '10')}
       ${_inp(`${tk}-eveb-shares`, 'Shares (M)', d.shares_m, 'To convert equity value to per share', '0.1', '0.001')}
     </div>`;
   return _cardWrap('eveb', tk, 'EV / EBIT',
     'Similar to EV/EBITDA but uses EBIT — penalises capital-heavy businesses more',
     body);
+}
+
+// ── C3: EV waterfall bridge HTML (shared by EV/EBITDA + EV/EBIT) ─────────────
+function _evBridgeHTML(tk, modelId, d) {
+  const b = d.ev_bridge;
+  if (!b || !b.market_cap_m) return '';
+  const parts = [
+    { label: 'Market Cap',    value: b.market_cap_m,       sign: +1, cls: 'bridge-base'     },
+    { label: 'Debt',          value: b.debt_m,             sign: +1, cls: 'bridge-add'      },
+    { label: 'Op. Leases',    value: b.op_leases_m || 0,   sign: +1, cls: 'bridge-add soft' },
+    { label: 'Pension',       value: b.pension_m   || 0,   sign: +1, cls: 'bridge-add soft' },
+    { label: 'Preferred',     value: b.preferred_m || 0,   sign: +1, cls: 'bridge-add soft' },
+    { label: 'Minority Int.', value: b.minority_m  || 0,   sign: +1, cls: 'bridge-add soft' },
+    { label: 'Cash',          value: b.cash_m,             sign: -1, cls: 'bridge-sub'      },
+  ];
+  const max = Math.max(1, b.market_cap_m + b.debt_m + (b.op_leases_m||0) + (b.pension_m||0) + (b.preferred_m||0) + (b.minority_m||0));
+  const fmt = (v) => {
+    if (!v || Math.abs(v) < 0.01) return '0';
+    if (Math.abs(v) >= 1000) return `${(v/1000).toFixed(1)}B`;
+    return `${v.toFixed(0)}M`;
+  };
+  const bars = parts.map(p => {
+    const w = Math.max(1, Math.min(100, (Math.abs(p.value) / max) * 100));
+    const signPrefix = p.sign < 0 ? '−' : (p.cls.includes('base') ? '' : '+');
+    const skip = Math.abs(p.value) < 0.5 && !p.cls.includes('base') ? ' bridge-skip' : '';
+    return `
+      <div class="val-ev-bridge-row${skip}">
+        <div class="val-ev-bridge-label">${signPrefix}${p.label}</div>
+        <div class="val-ev-bridge-bar">
+          <div class="val-ev-bridge-fill ${p.cls}" style="width:${w.toFixed(1)}%"></div>
+        </div>
+        <div class="val-ev-bridge-value">${fmt(Math.abs(p.value))}</div>
+      </div>`;
+  }).join('');
+  return `
+    <details class="val-ev-bridge" ${modelId === 'evda' ? 'open' : ''}>
+      <summary>EV bridge: Market Cap → Enterprise Value (${fmt(b.ev_total_m)} total)</summary>
+      <div class="val-ev-bridge-body">
+        ${bars}
+        <div class="val-ev-bridge-row val-ev-bridge-total">
+          <div class="val-ev-bridge-label">= Enterprise Value</div>
+          <div class="val-ev-bridge-bar"><div class="val-ev-bridge-fill bridge-total" style="width:100%"></div></div>
+          <div class="val-ev-bridge-value">${fmt(b.ev_total_m)}</div>
+        </div>
+      </div>
+    </details>`;
 }
 
 // 7. P/S ───────────────────────────────────────────────────────────────────────
@@ -1374,25 +1617,36 @@ function _recalcTicker(tk) {
   const udEl = document.getElementById(`ud-${tk}-rdcf`);
   if (udEl) udEl.innerHTML = '';
 
-  // EPV
+  // EPV (Greenwald 3-number model)
   const epvEbit    = _gv(`${tk}-epv-ebit`);
   const epvTax     = _gv(`${tk}-epv-tax`)   / 100;
   const epvWacc    = _gv(`${tk}-epv-wacc`)  / 100;
+  const epvMCapex  = _gv(`${tk}-epv-mcapex`);
   const epvNetDebt = _gv(`${tk}-epv-netdebt`);
   const epvShares  = Math.max(_gv(`${tk}-epv-shares`), 0.001);
-  results.epv = _calcEPV(epvEbit, epvTax, epvWacc, epvNetDebt, epvShares);
+  const epvAssetM  = _gv(`${tk}-epv-assetval`);
+  results.epv = _calcEPV(epvEbit, epvTax, epvWacc, epvNetDebt, epvShares, epvMCapex);
+  const epvFirm = _calcEPVFirm(epvEbit, epvTax, epvWacc, epvMCapex);
+  const assetEquityM = epvAssetM - epvNetDebt;
+  const assetPs = assetEquityM > 0 ? r2((assetEquityM * 1e6) / (epvShares * 1e6)) : null;
+  const moatPct = (epvFirm && epvFirm !== 0)
+    ? r2(((epvFirm - epvAssetM) / Math.abs(epvFirm)) * 100) : null;
   _setResult(`res-${tk}-epv`, results.epv, cur);
   _setUD(`ud-${tk}-epv`, results.epv, price);
-  _setEPVWorkings(tk, epvEbit, epvTax, epvWacc, epvNetDebt, epvShares, results.epv, cur);
+  _setEPVTrio(tk, results.epv, assetPs, moatPct, cur);
+  _setEPVWorkings(tk, epvEbit, epvTax, epvWacc, epvMCapex, epvNetDebt, epvShares,
+                  epvAssetM, epvFirm, moatPct, results.epv, cur);
 
-  // DDM
+  // DDM — 3-stage (high → fade → terminal), discounted at cost of equity
   const ddmDiv = _gv(`${tk}-ddm-div`);
-  const ddmG   = _gv(`${tk}-ddm-g`) / 100;
-  const ddmR   = _gv(`${tk}-ddm-r`) / 100;
-  results.ddm = (ddmDiv > 0) ? _calcDDM(ddmDiv, ddmG, ddmR) : null;
+  const ddmG1  = _gv(`${tk}-ddm-g1`) / 100;
+  const ddmG2  = _gv(`${tk}-ddm-g2`) / 100;
+  const ddmTg  = _gv(`${tk}-ddm-tg`) / 100;
+  const ddmR   = _gv(`${tk}-ddm-r`)  / 100;
+  results.ddm = (ddmDiv > 0) ? _calcDDM3(ddmDiv, ddmG1, ddmG2, ddmTg, ddmR) : null;
   _setResult(`res-${tk}-ddm`, results.ddm, cur);
   _setUD(`ud-${tk}-ddm`, results.ddm, price);
-  _setDDMWorkings(tk, ddmDiv, ddmG, ddmR, results.ddm, cur);
+  _setDDMWorkings3(tk, ddmDiv, ddmG1, ddmG2, ddmTg, ddmR, results.ddm, cur);
 
   // P/E
   const peEpsTtm = _gv(`${tk}-pe-epsttm`);
@@ -1497,14 +1751,35 @@ function _calcDCF(fcffPs, g1, g2, tg, wacc, mos, netDebtPerShare) {
   return b ? b.fairValue : null;
 }
 
-function _calcEPV(ebitM, tax, wacc, netDebtM, sharesM) {
+function _calcEPV(ebitM, tax, wacc, netDebtM, sharesM, maintCapexM) {
+  // Greenwald EPV: NOPAT − maintenance capex, capitalised at WACC.
+  // Returns per-share equity fair value. maintCapexM is optional (default 0).
   if (!ebitM || !wacc || wacc <= 0 || !sharesM) return null;
-  const nopat     = ebitM * (1 - tax);          // $M
-  const firmValue = nopat / wacc;               // $M
-  const equity    = firmValue - netDebtM;       // $M
+  const nopat     = ebitM * (1 - tax) - (maintCapexM || 0);  // $M
+  const firmValue = nopat / wacc;                             // $M
+  const equity    = firmValue - netDebtM;                     // $M
   return equity > 0 ? r2((equity * 1e6) / (sharesM * 1e6)) : null;
 }
 
+function _calcEPVFirm(ebitM, tax, wacc, maintCapexM) {
+  if (!ebitM || !wacc || wacc <= 0) return null;
+  const nopat = ebitM * (1 - tax) - (maintCapexM || 0);
+  return r2(nopat / wacc);
+}
+
+// 3-stage DDM: explicit Stage 1 (1..5), Stage 2 (6..10), Stage 3 terminal.
+// Discount rate r is cost of equity (not WACC).
+function _calcDDM3(div, g1, g2, tg, r) {
+  if (!div || div <= 0 || r <= 0 || r <= tg) return null;
+  let pv = 0, d = div;
+  for (let y = 1; y <= 5;  y++) { d *= (1 + g1); pv += d / Math.pow(1 + r, y); }
+  for (let y = 6; y <= 10; y++) { d *= (1 + g2); pv += d / Math.pow(1 + r, y); }
+  const tv   = (d * (1 + tg)) / (r - tg);
+  const pvTv = tv / Math.pow(1 + r, 10);
+  return r2(pv + pvTv);
+}
+
+// Legacy 1-stage Gordon Growth (still used by older call sites if any)
 function _calcDDM(div, g, r) {
   if (!div || div <= 0 || r <= g || r <= 0) return null;
   return r2((div * (1 + g)) / (r - g));
@@ -1737,20 +2012,54 @@ function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur, netDebtP
   el.innerHTML = stepsHTML + gridHTML;
 }
 
-function _setEPVWorkings(tk, ebitM, tax, wacc, netDebtM, sharesM, result, cur) {
+function _setEPVTrio(tk, epvPs, assetPs, moatPct, cur) {
+  const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  setTxt(`epv-trio-epv-${tk}`,   epvPs   ? _fp(epvPs, cur)   : '—');
+  setTxt(`epv-trio-asset-${tk}`, assetPs ? _fp(assetPs, cur) : '—');
+  const mEl = document.getElementById(`epv-trio-moat-${tk}`);
+  const hEl = document.getElementById(`epv-trio-moat-hint-${tk}`);
+  if (mEl) {
+    if (moatPct === null || moatPct === undefined || !isFinite(moatPct)) {
+      mEl.textContent = '—'; mEl.className = 'val-epv-trio-value';
+      if (hEl) hEl.textContent = '(EPV − Asset) / EPV';
+    } else {
+      mEl.textContent = `${moatPct >= 0 ? '+' : ''}${moatPct.toFixed(0)}%`;
+      let cls = 'val-epv-trio-value';
+      let hint = '(EPV − Asset) / EPV';
+      if (moatPct > 50) { cls += ' moat-wide';   hint = 'Wide moat — EPV well above replacement cost'; }
+      else if (moatPct > 10) { cls += ' moat-narrow'; hint = 'Narrow moat — modest earnings premium'; }
+      else if (moatPct > -10){ cls += ' moat-none';   hint = 'No moat — earnings ≈ asset value'; }
+      else { cls += ' moat-neg'; hint = 'Negative — earnings destroy capital vs asset cost'; }
+      mEl.className = cls;
+      if (hEl) hEl.textContent = hint;
+    }
+  }
+}
+
+function _setEPVWorkings(tk, ebitM, tax, wacc, mCapexM, netDebtM, sharesM,
+                         assetValM, epvFirm, moatPct, result, cur) {
   const el = document.getElementById(`wp-${tk}-epv`); if (!el) return;
   if (!result) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute.</div>'; return; }
   const nopat = ebitM * (1-tax);
-  const firm  = nopat / wacc;
+  const owner = nopat - (mCapexM || 0);
+  const firm  = owner / wacc;
   const eq    = firm - netDebtM;
-  el.innerHTML = _steps([
-    ['1', `NOPAT = EBIT × (1 − Tax Rate) = $${ebitM.toFixed(0)}M × (1 − ${(tax*100).toFixed(1)}%) = $${nopat.toFixed(0)}M`, 'Net Operating Profit After Tax'],
-    ['2', `EPV (firm) = NOPAT ÷ WACC = $${nopat.toFixed(0)}M ÷ ${(wacc*100).toFixed(1)}% = $${firm.toFixed(0)}M`, 'Capitalise at WACC — no growth assumed'],
-    ['3', `Equity Value = EPV − Net Debt = $${firm.toFixed(0)}M − $${netDebtM.toFixed(0)}M = $${eq.toFixed(0)}M`, ''],
-    ['4', `Per Share = $${eq.toFixed(0)}M ÷ ${sharesM.toFixed(0)}M shares = ${_fp(result, cur)}`, 'Final EPV fair value'],
-  ]);
+  const rows = [
+    ['1', `NOPAT = Norm. EBIT × (1 − Tax) = $${ebitM.toFixed(0)}M × (1 − ${(tax*100).toFixed(1)}%) = $${nopat.toFixed(0)}M`, '5–10yr average EBIT margin × current revenue'],
+    ['2', `Owner Earnings = NOPAT − Maint. Capex = $${nopat.toFixed(0)}M − $${(mCapexM||0).toFixed(0)}M = $${owner.toFixed(0)}M`, 'Deduct cash needed to maintain existing productive capacity'],
+    ['3', `EPV (firm) = Owner Earnings ÷ WACC = $${owner.toFixed(0)}M ÷ ${(wacc*100).toFixed(1)}% = $${firm.toFixed(0)}M`, 'Capitalise at WACC — no growth assumed'],
+    ['4', `Asset Reproduction Value (firm) = $${assetValM.toFixed(0)}M`, 'Tangible book + partial intangibles/goodwill (Greenwald)'],
+  ];
+  if (moatPct !== null && moatPct !== undefined) {
+    const cls = moatPct > 50 ? 'pos' : moatPct > 10 ? '' : moatPct < -10 ? 'neg' : '';
+    rows.push(['5', `Moat Premium = (EPV − Asset) / EPV = <span class="${cls}"><strong>${moatPct >= 0 ? '+' : ''}${moatPct.toFixed(0)}%</strong></span>`, 'Positive = durable competitive advantage; negative = capital destruction']);
+  }
+  rows.push(['6', `Equity = EPV − Net Debt = $${firm.toFixed(0)}M − $${netDebtM.toFixed(0)}M = $${eq.toFixed(0)}M`, '']);
+  rows.push(['7', `Per Share = $${eq.toFixed(0)}M ÷ ${sharesM.toFixed(0)}M = ${_fp(result, cur)}`, 'Final EPV-per-share fair value']);
+  el.innerHTML = _steps(rows);
 }
 
+// Legacy 1-stage DDM workings (kept for callers that still exist)
 function _setDDMWorkings(tk, div, g, r, result, cur) {
   const el = document.getElementById(`wp-${tk}-ddm`); if (!el) return;
   if (!result) { el.innerHTML = '<div style="color:var(--muted)">No dividend or r ≤ g.</div>'; return; }
@@ -1760,6 +2069,34 @@ function _setDDMWorkings(tk, div, g, r, result, cur) {
     ['2', `P = D₁ ÷ (r − g) = ${_fp(d1,cur)} ÷ (${(r*100).toFixed(1)}% − ${(g*100).toFixed(1)}%)`, ''],
     ['3', `P = ${_fp(d1,cur)} ÷ ${((r-g)*100).toFixed(1)}% = ${_fp(result,cur)}`, 'Gordon Growth Model fair value'],
   ]);
+}
+
+// 3-stage DDM workings: high-growth (1-5), fade (6-10), terminal
+function _setDDMWorkings3(tk, div, g1, g2, tg, r, result, cur) {
+  const el = document.getElementById(`wp-${tk}-ddm`); if (!el) return;
+  if (!result) {
+    el.innerHTML = '<div style="color:var(--muted)">No dividend or r ≤ terminal g.</div>';
+    return;
+  }
+  // Simulate the stages so we can display per-year flows
+  let pv1 = 0, pv2 = 0, d = div;
+  const yrs1 = [], yrs2 = [];
+  for (let y = 1; y <= 5;  y++) { d *= (1 + g1); const disc = d / Math.pow(1+r,y); pv1 += disc; yrs1.push({y, d, disc}); }
+  for (let y = 6; y <= 10; y++) { d *= (1 + g2); const disc = d / Math.pow(1+r,y); pv2 += disc; yrs2.push({y, d, disc}); }
+  const tv   = (d * (1 + tg)) / (r - tg);
+  const pvTv = tv / Math.pow(1+r, 10);
+  const rows = [
+    ['1', `Stage 1 (y1–5) @ g₁ = ${(g1*100).toFixed(1)}% → PV = ${_fp(pv1, cur)}`,
+          yrs1.map(x => `y${x.y}:${_fp(x.d,cur)}`).join(' · ')],
+    ['2', `Stage 2 (y6–10) @ g₂ = ${(g2*100).toFixed(1)}% → PV = ${_fp(pv2, cur)}`,
+          yrs2.map(x => `y${x.y}:${_fp(x.d,cur)}`).join(' · ')],
+    ['3', `Terminal value at y10: D₁₁ ÷ (r − g) = ${_fp(d*(1+tg), cur)} ÷ (${(r*100).toFixed(1)}% − ${(tg*100).toFixed(1)}%) = ${_fp(tv, cur)}`, ''],
+    ['4', `PV of Terminal = TV ÷ (1+r)¹⁰ = ${_fp(pvTv, cur)}`,
+          `TV share of fair value: ${((pvTv/(pv1+pv2+pvTv))*100).toFixed(0)}%`],
+    ['5', `Fair Value = PV₁ + PV₂ + PV(TV) = ${_fp(result, cur)}`,
+          'Discounted at cost of equity (Ke), not WACC — dividends flow to equity holders only'],
+  ];
+  el.innerHTML = _steps(rows);
 }
 
 function _setPEWorkings(tk, epsTtm, epsFwd, mulTtm, mulFwd, valTtm, valFwd, cur) {

@@ -31,8 +31,10 @@ def fetch_financials(ticker: str) -> dict:
     # yfinance provides up to 4 years of annual data reliably
     historical_fcf = []
     fcf_total_latest = float(info.get("freeCashflow") or 0)
-    dna_latest_m    = 0.0   # D&A most-recent year ($M)
-    sbc_latest_m    = 0.0   # Stock-Based Comp most-recent year ($M)
+    dna_latest_m       = 0.0   # D&A most-recent year ($M)
+    sbc_latest_m       = 0.0   # Stock-Based Comp most-recent year ($M)
+    buybacks_latest_m  = 0.0   # Share repurchases most-recent year ($M, positive)
+    dividends_paid_m   = 0.0   # Cash dividends paid most-recent year ($M, positive)
     try:
         cf = t.cashflow
         if cf is not None and not cf.empty:
@@ -42,6 +44,7 @@ def fetch_financials(ticker: str) -> dict:
                 except Exception:
                     continue
                 op_cf, capex, dna, sbc = 0.0, 0.0, 0.0, 0.0
+                buyback, div_cash = 0.0, 0.0
                 for label in ("Operating Cash Flow", "Cash Flow From Continuing Operating Activities"):
                     if label in cf.index:
                         v = cf.loc[label, col]
@@ -69,6 +72,23 @@ def fetch_financials(ticker: str) -> dict:
                         if not _isnan(v):
                             sbc = abs(float(v))
                             break
+                # Share repurchases (stored as negative → take abs)
+                for label in ("Repurchase Of Capital Stock", "Common Stock Repurchased",
+                               "Repurchase Of Common Stock", "Purchase Of Common Stock",
+                               "Treasury Stock Purchased"):
+                    if label in cf.index:
+                        v = cf.loc[label, col]
+                        if not _isnan(v):
+                            buyback = abs(float(v))
+                            break
+                # Cash dividends paid (stored as negative → take abs)
+                for label in ("Cash Dividends Paid", "Common Stock Dividend Paid",
+                               "Dividends Paid"):
+                    if label in cf.index:
+                        v = cf.loc[label, col]
+                        if not _isnan(v):
+                            div_cash = abs(float(v))
+                            break
                 fcf = op_cf + capex   # capex is stored as negative
                 # Owner Earnings ≈ FCF − SBC
                 # (maintenance capex ≈ D&A, so D&A adds back; they roughly cancel)
@@ -80,13 +100,17 @@ def fetch_financials(ticker: str) -> dict:
                     "fcf_m":            round(fcf            / 1e6, 1),
                     "dna_m":            round(dna            / 1e6, 1),
                     "sbc_m":            round(sbc            / 1e6, 1),
+                    "buyback_m":        round(buyback        / 1e6, 1),
+                    "div_paid_m":       round(div_cash       / 1e6, 1),
                     "owner_earnings_m": round(owner_earnings / 1e6, 1),
                 })
             historical_fcf.sort(key=lambda x: -x["year"])
             if historical_fcf:
-                fcf_total_latest = historical_fcf[0]["fcf_m"] * 1e6
-                dna_latest_m     = historical_fcf[0]["dna_m"]
-                sbc_latest_m     = historical_fcf[0]["sbc_m"]
+                fcf_total_latest   = historical_fcf[0]["fcf_m"] * 1e6
+                dna_latest_m       = historical_fcf[0]["dna_m"]
+                sbc_latest_m       = historical_fcf[0]["sbc_m"]
+                buybacks_latest_m  = historical_fcf[0].get("buyback_m", 0.0)
+                dividends_paid_m   = historical_fcf[0].get("div_paid_m", 0.0)
     except Exception as e:
         logger.warning("Could not parse cashflow: %s", e)
 
@@ -149,6 +173,14 @@ def fetch_financials(ticker: str) -> dict:
     # ── Balance sheet ─────────────────────────────────────────────
     current_assets_m  = 0.0
     total_liab_m      = 0.0
+    total_assets_m    = 0.0
+    total_equity_m    = 0.0
+    goodwill_m        = 0.0
+    intangibles_m     = 0.0
+    op_lease_liab_m   = 0.0    # Operating lease liability
+    pension_liab_m    = 0.0    # Pension deficit / post-retirement obligation
+    preferred_stock_m = 0.0    # Preferred equity
+    minority_int_m    = 0.0    # Non-controlling / minority interest
     book_value_ps     = float(info.get("bookValue") or 0)
     total_debt        = float(info.get("totalDebt")  or 0)
     cash              = float(info.get("totalCash")  or 0)
@@ -170,10 +202,90 @@ def fetch_financials(ticker: str) -> dict:
                     if not _isnan(v):
                         total_liab_m = float(v) / 1e6
                         break
+            for label in ("Total Assets",):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        total_assets_m = float(v) / 1e6
+                        break
+            for label in ("Stockholders Equity", "Total Equity Gross Minority Interest",
+                           "Common Stock Equity"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        total_equity_m = float(v) / 1e6
+                        break
+            for label in ("Goodwill",):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        goodwill_m = float(v) / 1e6
+                        break
+            for label in ("Other Intangible Assets", "Intangible Assets",
+                           "Goodwill And Other Intangible Assets"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        intangibles_m = float(v) / 1e6
+                        break
+            # Operating lease liability (current + non-current)
+            for label in ("Long Term Capital Lease Obligation",
+                           "Operating Lease Liability Noncurrent",
+                           "Capital Lease Obligations"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        op_lease_liab_m += float(v) / 1e6
+                        break
+            for label in ("Current Capital Lease Obligation",
+                           "Operating Lease Liability Current"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        op_lease_liab_m += float(v) / 1e6
+                        break
+            for label in ("Pension And Other Post Retirement Benefit Plans Current",
+                           "Pensionand Other Post Retirement Benefit Plans Current"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        pension_liab_m += float(v) / 1e6
+                        break
+            for label in ("Non Current Pension And Other Postretirement Benefit Plans",
+                           "Pension And Other Post Retirement Benefit Plans"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        pension_liab_m += float(v) / 1e6
+                        break
+            for label in ("Preferred Stock Equity", "Preferred Stock",
+                           "Preferred Securities Outside Stock Equity"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        preferred_stock_m = float(v) / 1e6
+                        break
+            for label in ("Minority Interest", "Non Controlling Interests",
+                           "Noncontrolling Interest"):
+                if label in bs.index:
+                    v = bs.loc[label, col0]
+                    if not _isnan(v):
+                        minority_int_m = float(v) / 1e6
+                        break
     except Exception as e:
         logger.warning("Could not parse balance sheet: %s", e)
 
     ncav_per_share = ((current_assets_m - total_liab_m) * 1e6 / shares) if shares else 0
+
+    # Tangible book value = total equity − goodwill − other intangibles
+    tangible_book_m = max(0.0, total_equity_m - goodwill_m - intangibles_m)
+    tangible_book_ps = (tangible_book_m * 1e6 / shares) if shares else 0
+
+    # Asset Reproduction Value (Graham/Greenwald style):
+    # Tangible assets at book + partial credit for intangibles (50%) and goodwill (25%)
+    # representing replacement cost of brand / customer base / R&D stock
+    asset_reproduction_m = tangible_book_m + 0.5 * intangibles_m + 0.25 * goodwill_m
+    asset_reproduction_ps = (asset_reproduction_m * 1e6 / shares) if shares else 0
 
     # ── Multiples ────────────────────────────────────────────────
     pe_ttm    = float(info.get("trailingPE")  or 0)
@@ -218,6 +330,9 @@ def fetch_financials(ticker: str) -> dict:
     # Owner earnings ≈ FCF − SBC
     owner_earnings_latest_m  = round(fcf_latest_m - sbc_latest_m, 1)
     owner_earnings_per_share = (owner_earnings_latest_m * 1e6 / shares) if shares else 0
+
+    # ── Cost of equity from WACC breakdown (used by DDM) ──────────
+    cost_of_equity_pct = wacc_detail.get("ke") if wacc_detail else wacc
 
     # ── Sector P/E & EV/EBITDA suggestions ───────────────────────
     pe_sector_defaults = {
@@ -449,6 +564,97 @@ def fetch_financials(ticker: str) -> dict:
     except Exception as e:
         logger.warning("Could not parse dividend history: %s", e)
 
+    # ── C1: Normalized EBIT, maintenance capex, moat premium ────────
+    # Blend 5-10yr historical EBIT margin with current revenue.
+    normalized_ebit_m    = ebit_m
+    avg_ebit_margin_pct  = 0.0
+    try:
+        # Align annual revenue and EBIT by year; compute margin per year
+        rev_by_yr  = {r['year']: r['revenue_m'] for r in revenue_annual if r.get('revenue_m')}
+        ebit_by_yr = {r['year']: r['ebit_m']    for r in ebit_annual    if r.get('ebit_m') is not None}
+        margins = []
+        for yr, rev in rev_by_yr.items():
+            eb = ebit_by_yr.get(yr)
+            if eb is not None and rev and rev > 0:
+                margins.append(eb / rev)
+        # Trim min/max for robustness if we have >=5 points
+        if len(margins) >= 5:
+            margins_sorted = sorted(margins)
+            margins_trim   = margins_sorted[1:-1]
+            avg_margin     = sum(margins_trim) / len(margins_trim)
+        elif margins:
+            avg_margin = sum(margins) / len(margins)
+        else:
+            avg_margin = (ebit_m / revenue_m) if revenue_m else 0.0
+        avg_ebit_margin_pct = round(avg_margin * 100, 2)
+        if revenue_m and avg_margin:
+            normalized_ebit_m = round(avg_margin * revenue_m, 1)
+    except Exception as e:
+        logger.warning("Could not compute normalized EBIT: %s", e)
+
+    # Maintenance capex ≈ D&A (Buffett rule of thumb). Diff vs total capex =
+    # growth capex, which we back out of the EPV no-growth scenario.
+    maintenance_capex_m = round(dna_latest_m, 1)
+
+    # Moat premium = (EPV − Asset Reproduction Value) / EPV
+    # EPV = NOPAT / WACC. If EPV > asset value, the excess is attributable to
+    # durable competitive advantage (Greenwald). If EPV < asset value, the
+    # company destroys capital.
+    moat_premium_pct = None
+    epv_firm_m       = None
+    try:
+        nopat_m = normalized_ebit_m * (1.0 - tax_rate)
+        if wacc and wacc > 0:
+            epv_firm_m = round(nopat_m / (wacc / 100.0), 1)
+            if epv_firm_m and asset_reproduction_m and epv_firm_m != 0:
+                moat_premium_pct = round(
+                    ((epv_firm_m - asset_reproduction_m) / abs(epv_firm_m)) * 100, 1
+                )
+    except Exception:
+        pass
+
+    # ── C2: Payout ratio & total shareholder yield ─────────────────
+    payout_ratio_pct = None
+    try:
+        # Pull most recent net income from eps_history proxy
+        # (net_inc / shares = eps_yr — invert to net_inc)
+        latest_net_income_m = None
+        if eps_history:
+            last = eps_history[-1]
+            if last.get('eps') and shares:
+                latest_net_income_m = (last['eps'] * shares) / 1e6
+        if latest_net_income_m and latest_net_income_m > 0 and dividends_paid_m > 0:
+            payout_ratio_pct = round((dividends_paid_m / latest_net_income_m) * 100, 1)
+    except Exception:
+        pass
+
+    buyback_yield_pct = 0.0
+    if buybacks_latest_m > 0 and mktcap > 0:
+        buyback_yield_pct = round((buybacks_latest_m * 1e6 / mktcap) * 100, 2)
+    total_shareholder_yield_pct = round(div_yield + buyback_yield_pct, 2)
+
+    # ── C3: EV waterfall bridge ────────────────────────────────────
+    # Enterprise Value ≈ Market Cap + Total Debt + Operating Leases
+    #                  + Pension Deficit + Preferred Stock + Minority Interest
+    #                  − Cash & Equivalents
+    mc_m       = round(mktcap     / 1e6, 1)
+    debt_m     = round(total_debt / 1e6, 1)
+    cash_m     = round(cash       / 1e6, 1)
+    ev_bridge_m = round(
+        mc_m + debt_m + op_lease_liab_m + pension_liab_m
+        + preferred_stock_m + minority_int_m - cash_m, 1
+    )
+    ev_bridge = {
+        "market_cap_m":    mc_m,
+        "debt_m":          debt_m,
+        "op_leases_m":     round(op_lease_liab_m,  1),
+        "pension_m":       round(pension_liab_m,   1),
+        "preferred_m":     round(preferred_stock_m, 1),
+        "minority_m":      round(minority_int_m,   1),
+        "cash_m":          cash_m,
+        "ev_total_m":      ev_bridge_m,
+    }
+
     # ── Composite "Ultimate" quality score (0-100) ────────────────
     # Blends fundamentals (F-Score), solvency (Z-Score), and valuation signal.
     composite_score = None
@@ -570,6 +776,34 @@ def fetch_financials(ticker: str) -> dict:
         "ebit_per_share":     round(ebit_per_share, 2),
         "revenue_per_share":  round(revenue_per_share, 2),
         "tax_rate_pct":       round(tax_rate * 100, 1),
+
+        # C1: Normalized earnings power + asset reproduction + moat
+        "normalized_ebit_m":      normalized_ebit_m,
+        "avg_ebit_margin_pct":    avg_ebit_margin_pct,
+        "maintenance_capex_m":    maintenance_capex_m,
+        "asset_reproduction_m":   round(asset_reproduction_m,  1),
+        "asset_reproduction_ps":  round(asset_reproduction_ps, 2),
+        "tangible_book_m":        round(tangible_book_m,       1),
+        "tangible_book_ps":       round(tangible_book_ps,      2),
+        "goodwill_m":             round(goodwill_m,            1),
+        "intangibles_m":          round(intangibles_m,         1),
+        "epv_firm_m":             epv_firm_m,
+        "moat_premium_pct":       moat_premium_pct,
+
+        # C2: Shareholder return
+        "buybacks_m":                  round(buybacks_latest_m, 1),
+        "dividends_paid_m":            round(dividends_paid_m,  1),
+        "buyback_yield_pct":           buyback_yield_pct,
+        "total_shareholder_yield_pct": total_shareholder_yield_pct,
+        "payout_ratio_pct":            payout_ratio_pct,
+        "cost_of_equity_pct":          cost_of_equity_pct,
+
+        # C3: EV waterfall bridge
+        "ev_bridge":          ev_bridge,
+        "op_lease_liab_m":    round(op_lease_liab_m, 1),
+        "pension_liab_m":     round(pension_liab_m,  1),
+        "preferred_stock_m":  round(preferred_stock_m, 1),
+        "minority_int_m":     round(minority_int_m,  1),
 
         # PEG
         "peg_ratio": round(pe_ttm / earnings_growth_pct, 2)
