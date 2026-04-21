@@ -419,7 +419,6 @@ function _stockHeaderHTML(d) {
   }
 
   const summary = d.business_summary || '';
-  const truncated = summary.length > 300 ? summary.slice(0, 300) + '...' : summary;
 
   return `
   <div class="val-stock-header-top">
@@ -444,7 +443,6 @@ function _stockHeaderHTML(d) {
         ${_zScoreTag(d)}
         ${_bestMultipleTag(d)}
       </div>
-      ${truncated ? `<div class="val-biz-summary">${truncated}</div>` : ''}
     </div>
     <div class="val-stock-chart-col">
       <div class="val-price-row">
@@ -457,7 +455,8 @@ function _stockHeaderHTML(d) {
         Copy Snapshot
       </button>
     </div>
-  </div>`;
+  </div>
+  ${summary ? `<div class="val-biz-summary">${summary}</div>` : ''}`;
 }
 
 // ── Header badge helpers ────────────────────────────────────────────
@@ -927,6 +926,42 @@ const _MODEL_EXPLAINERS = {
       "Assumes assets can be liquidated at book value — rarely true for inventory (discounted 20–50%) or AR.",
       "Value traps: stocks stay below NCAV for years while losses compound.",
       "Extremely rare among large/mid caps — mostly a micro-cap tool.",
+    ],
+  },
+  qual: {
+    formula: "Composite Score = avg(Cash Conversion Score, Accruals Score, SBC Drag Score) — each signal mapped 0→100",
+    assumptions: [
+      "Cash conversion = 5-year sum of FCF ÷ 5-year sum of Net Income. High ratio (≥80%) means earnings back up by real cash.",
+      "Accruals ratio = (Net Income TTM − Operating CF TTM) ÷ Total Assets. Measures how much profit is 'paper' rather than cash.",
+      "SBC drag = 5-year sum of Stock-Based Comp ÷ 5-year sum of FCF. Measures dilution cost passed to shareholders.",
+    ],
+    care: [
+      "A 'Clean' score means all three signals are healthy — earnings are largely cash-backed and SBC is modest.",
+      "Look for deteriorating trends (score falling year-over-year) as an early warning sign.",
+      "Cross-check with F-Score Accruals criterion (OCF > Net Income) for consistency.",
+    ],
+    pitfalls: [
+      "High SBC is normal for early-stage tech — compare to peers rather than applying a one-size rule.",
+      "A single large restructuring charge or divestiture can distort accruals in one year.",
+      "This card is informational only — it doesn't produce a fair-value estimate.",
+    ],
+  },
+  fscore: {
+    formula: "Piotroski F-Score = sum of 9 binary tests (0 or 1 each). Z-Score = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E",
+    assumptions: [
+      "F-Score: 9 tests spanning Profitability (4), Leverage/Liquidity (3), and Efficiency (2). Scores 7–9 = Strong, 4–6 = Neutral, 0–3 = Weak.",
+      "Altman Z-Score: A = working capital/assets, B = retained earnings/assets, C = EBIT/assets, D = mkt cap/liabilities, E = revenue/assets.",
+      "Both metrics compare the most recent fiscal year against the prior year, so they are inherently backward-looking.",
+    ],
+    care: [
+      "F-Score works best as a filter — use it to screen out deteriorating businesses, not to identify exact fair value.",
+      "Z-Score >2.99 = safe zone; 1.81–2.99 = grey zone; <1.81 = distress zone. Altman calibrated on US manufacturing; adjust expectations for asset-light tech firms.",
+      "Combine both: high F-Score (7+) with safe Z-Score (>3.0) = fundamentally improving, financially stable business.",
+    ],
+    pitfalls: [
+      "F-Score tests are binary — a company marginally missing one test (e.g., slightly higher leverage) scores the same as one that massively failed it.",
+      "Altman Z-Score was designed for manufacturing companies. Newer 'Z'-Score variants exist for non-manufacturers; results for tech/financials should be taken with caution.",
+      "Both scores use annual reported data — interim deterioration (e.g., mid-year credit crunch) won't be captured until the next filing.",
     ],
   },
 };
@@ -1755,9 +1790,10 @@ function _renderConsensus(tk, results, price, cur) {
     ncav:   'NCAV',
   };
 
-  // Collect active (non-null, positive) estimates
+  // Collect active (non-null, positive, not hidden by model filter) estimates
   const entries = Object.entries(MODEL_LABELS)
     .map(([id, label]) => {
+      if (_vModelSettings[id] === false) return null;   // excluded by settings filter
       const v = results[id];
       return (v !== null && v !== undefined && v > 0) ? { id, label, fv: v } : null;
     })
@@ -2211,6 +2247,7 @@ function _recalcTicker(tk) {
     if (mainEl) { mainEl.textContent = txt; mainEl.className = `val-card-result ${cls}`; }
   }
   _setReverseDCFExtras(tk, rdFcfPs, rdWacc, rdTg, price, rdNdPs, revTvShare, cur);
+  _setRDCFWorkings(tk, rdFcfPs, rdWacc, rdTg, price, rdNdPs, impliedG, cur);
   const udEl = document.getElementById(`ud-${tk}-rdcf`);
   if (udEl) udEl.innerHTML = '';
 
@@ -2323,12 +2360,14 @@ function _recalcTicker(tk) {
   if (qualEl) { qualEl.textContent = ''; qualEl.style.display = 'none'; }
   const qualUD = document.getElementById(`ud-${tk}-qual`);
   if (qualUD) qualUD.style.display = 'none';
+  _setQualWorkings(tk, d);
 
   // E2: F-Score card — informational, no fair value.
   const fsEl = document.getElementById(`res-${tk}-fscore`);
   if (fsEl) { fsEl.textContent = ''; fsEl.style.display = 'none'; }
   const fsUD = document.getElementById(`ud-${tk}-fscore`);
   if (fsUD) fsUD.style.display = 'none';
+  _setFscoreWorkings(tk, d);
 
   // D4: Consensus fair value summary
   _renderConsensus(tk, results, price, cur);
@@ -2771,6 +2810,75 @@ function _setNCAVWorkings(tk, caM, tlM, sharesM, result, cur) {
     ['2', `Per Share = $${net.toFixed(0)}M ÷ ${sharesM.toFixed(0)}M shares = ${result ? _fp(result, cur) : 'negative (liabilities exceed assets)'}`, ''],
     ['3', `Graham's rule: buy when Price < NCAV (deep discount to liquidation value)`, ''],
   ]);
+}
+
+// ── E1/E2/D3: Workings for Reverse DCF, Quality, F-Score ─────────────────────
+
+function _setRDCFWorkings(tk, fcffPs, wacc, tg, price, ndPs, impliedG, cur) {
+  const el = document.getElementById(`wp-${tk}-rdcf`); if (!el) return;
+  if (!fcffPs || !price || impliedG === null) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:11px;">Could not solve — check FCFF and WACC inputs.</div>';
+    return;
+  }
+  const pct = (impliedG * 100).toFixed(1);
+  const targetEV = (price + ndPs) > 0 ? price + ndPs : price;
+  el.innerHTML = _steps([
+    ['1', `Target Enterprise Value = Price + Net Debt per Share = ${_fp(price, cur)} + ${_fp(ndPs, cur)} = ${_fp(targetEV, cur)}`, 'We treat today\'s price as the EV answer and solve backwards'],
+    ['2', `FCFF per share = ${_fp(fcffPs, cur)}   ·   WACC = ${(wacc * 100).toFixed(1)}%   ·   Terminal g = ${(tg * 100).toFixed(1)}%`, ''],
+    ['3', `Solver finds Stage-1 growth g such that: Σ FCFF·(1+g)ᵗ/(1+WACC)ᵗ + TV = Target EV`, 'TV = FCF₁₀·(1+Tg)/(WACC−Tg), discounted back 10 years'],
+    ['4', `Implied 5-year growth = ${pct}%/yr`, 'If this exceeds your DCF Stage-1 input, the market is pricing in more optimism than your model assumes'],
+  ]);
+}
+
+function _setQualWorkings(tk, d) {
+  const el = document.getElementById(`wp-${tk}-qual`); if (!el) return;
+  const cc = d.cash_conversion_pct;
+  const ac = d.accruals_ratio_pct;
+  const sd = d.sbc_drag_pct;
+  const fmt = (v, suffix) => (v === null || v === undefined) ? '—' : v.toFixed(1) + suffix;
+  el.innerHTML = _steps([
+    ['1', `Cash Conversion (5yr) = Σ FCF / Σ Net Income = ${fmt(cc, '%')}`,
+          'Should be ≥ 80%. If FCF chronically lags NI, something in accruals or capex is inflating reported earnings.'],
+    ['2', `Accruals Ratio (TTM) = (Net Income − Operating CF) / Total Assets = ${fmt(ac, '%')}`,
+          'Should be close to 0. Large positive accruals = earnings not backed by cash. Flag at |x| > 5%.'],
+    ['3', `SBC Drag (5yr) = Σ Stock-Based Comp / Σ FCF = ${fmt(sd, '%')}`,
+          'Should be < 15%. High SBC erodes owner FCF — the economic cost is real even though it\'s non-cash.'],
+    ['4', `Composite score: avg of three 0–100 sub-scores → Clean (≥80) / Solid (60–79) / Mixed (40–59) / Suspect (<40)`, ''],
+  ]);
+}
+
+function _setFscoreWorkings(tk, d) {
+  const el = document.getElementById(`wp-${tk}-fscore`); if (!el) return;
+  const tests = d.f_score_details || {};
+  const z = d.z_score;
+  const zBand = d.z_score_band;
+
+  const row = (label, pass) => {
+    const icon = pass === undefined ? '?' : pass ? '✓' : '✕';
+    const cls  = pass === undefined ? '' : pass ? 'pos' : 'neg';
+    return `<tr><td class="${cls}" style="width:18px;font-weight:700;">${icon}</td><td style="font-size:11px;padding:2px 4px;">${label}</td></tr>`;
+  };
+
+  const zLine = z !== null && z !== undefined
+    ? `<div style="margin-top:10px;font-size:11px;">Altman Z-Score = 1.2×(WC/A) + 1.4×(RE/A) + 3.3×(EBIT/A) + 0.6×(MktCap/Liab) + 1.0×(Rev/A) = <strong>${z.toFixed(2)}</strong> — ${zBand === 'safe' ? 'Safe Zone (>2.99)' : zBand === 'grey' ? 'Grey Zone (1.81–2.99)' : 'Distress Zone (<1.81)'}</div>`
+    : '';
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;margin-bottom:6px;">
+      <tbody>
+        ${row('Net income > 0', tests.profit_pos)}
+        ${row('Return on assets > 0', tests.roa_pos)}
+        ${row('Operating cash flow > 0', tests.ocf_pos)}
+        ${row('OCF > Net income (quality of earnings)', tests.accruals)}
+        ${row('Long-term debt ratio decreased YoY', tests.leverage)}
+        ${row('Current ratio increased YoY', tests.liquidity)}
+        ${row('No new shares issued (dilution check)', tests.dilution)}
+        ${row('Gross margin improved YoY', tests.margin)}
+        ${row('Asset turnover improved YoY', tests.turnover)}
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);">Total: ${d.f_score !== null && d.f_score !== undefined ? d.f_score : '—'}/9  ·  7–9 = Strong  ·  4–6 = Neutral  ·  0–3 = Weak</div>
+    ${zLine}`;
 }
 
 // ── Comparison chart ──────────────────────────────────────────────────────────
