@@ -1081,21 +1081,88 @@ function _dcfCardHTML(tk, d) {
        </button>`
     : '';
 
-  // ── WACC breakdown ──
+  // ── WACC breakdown (fully editable CAPM inputs) ──
   const wd = d.wacc_detail || {};
-  const waccBreakdown = wd.ke ? `
+  const rfVal   = wd.rf            ?? 4.3;
+  const betaVal = wd.beta          ?? 1.0;
+  const erpVal  = wd.erp           ?? 5.5;
+  const kdVal   = wd.kd_aftertax   ?? 3.5;
+  const weVal   = wd.weight_equity ?? 100;
+  const wdValN  = wd.weight_debt   ?? 0;
+  const keValN  = wd.ke            ?? +(rfVal + betaVal * erpVal).toFixed(2);
+  const waccInitVal = +((keValN * weVal + kdVal * wdValN) / 100).toFixed(2);
+  const waccBreakdown = `
     <div class="dcf-wacc-box">
-      <div class="dcf-wacc-title">CAPM breakdown — how this WACC was calculated</div>
-      <div class="dcf-wacc-grid">
-        <div class="dcf-wacc-row"><span class="dcf-wk">Risk-free rate (Rf)</span><span class="dcf-wv">${wd.rf}%</span><span class="dcf-wh">10-yr govt bond yield</span></div>
-        <div class="dcf-wacc-row"><span class="dcf-wk">Beta (β)</span><span class="dcf-wv">${wd.beta}</span><span class="dcf-wh">Market sensitivity (1.0 = market)</span></div>
-        <div class="dcf-wacc-row"><span class="dcf-wk">Equity Risk Premium (ERP)</span><span class="dcf-wv">${wd.erp}%</span><span class="dcf-wh">Extra return required vs risk-free</span></div>
-        <div class="dcf-wacc-row dcf-wacc-sub"><span class="dcf-wk">Cost of Equity (Ke = Rf + β×ERP)</span><span class="dcf-wv ke">${wd.ke}%</span><span class="dcf-wh">Return required by equity holders</span></div>
-        <div class="dcf-wacc-row"><span class="dcf-wk">Cost of Debt after-tax (Kd)</span><span class="dcf-wv">${wd.kd_aftertax}%</span><span class="dcf-wh">Interest rate × (1 − tax rate)</span></div>
-        <div class="dcf-wacc-row"><span class="dcf-wk">Capital weights (Equity / Debt)</span><span class="dcf-wv">${wd.weight_equity}% / ${wd.weight_debt}%</span><span class="dcf-wh">By market value</span></div>
-        <div class="dcf-wacc-row dcf-wacc-total"><span class="dcf-wk">WACC = Ke×${wd.weight_equity}% + Kd×${wd.weight_debt}%</span><span class="dcf-wv wacc-final">${d.wacc_suggestion}%</span><span class="dcf-wh">Your discount rate</span></div>
+      <div class="dcf-wacc-edit-hdr">
+        <div class="dcf-wacc-edit-title">CAPM Assumptions — edit any value to recompute WACC live</div>
+        <div class="dcf-wacc-edit-sub">Inputs pre-filled from live market data. Override any assumption to test sensitivities.</div>
       </div>
-    </div>` : '';
+
+      <div class="dcf-wae-capm-row">
+        <div class="dcf-wae-cell">
+          <label class="dcf-wae-lbl">Rf — Risk-free rate</label>
+          <div class="dcf-wae-inp-wrap">
+            <input type="number" id="${tk}-dcf-rf"   class="dcf-wae-inp" value="${rfVal}"   step="0.1"  min="0"  max="15"  oninput="_updateWACCFromCAPM('${tk}')">
+            <span class="dcf-wae-unit">%</span>
+          </div>
+          <div class="dcf-wae-hint">10-yr govt bond yield</div>
+        </div>
+        <div class="dcf-wae-op">+</div>
+        <div class="dcf-wae-cell">
+          <label class="dcf-wae-lbl">β — Beta</label>
+          <div class="dcf-wae-inp-wrap">
+            <input type="number" id="${tk}-dcf-beta" class="dcf-wae-inp" value="${betaVal}" step="0.05" min="-1" max="5"   oninput="_updateWACCFromCAPM('${tk}')">
+          </div>
+          <div class="dcf-wae-hint">1.0 = market, &gt;1 = more volatile</div>
+        </div>
+        <div class="dcf-wae-op">×</div>
+        <div class="dcf-wae-cell">
+          <label class="dcf-wae-lbl">ERP — Equity premium</label>
+          <div class="dcf-wae-inp-wrap">
+            <input type="number" id="${tk}-dcf-erp"  class="dcf-wae-inp" value="${erpVal}"  step="0.1"  min="0"  max="20"  oninput="_updateWACCFromCAPM('${tk}')">
+            <span class="dcf-wae-unit">%</span>
+          </div>
+          <div class="dcf-wae-hint">Damodaran country ERP</div>
+        </div>
+        <div class="dcf-wae-arrow">= Ke</div>
+        <div class="dcf-wae-cell dcf-wae-computed">
+          <label class="dcf-wae-lbl">Ke — Cost of equity</label>
+          <div class="dcf-wae-computed-val" id="${tk}-dcf-ke-disp">${keValN}%</div>
+          <div class="dcf-wae-hint">Rf + β × ERP</div>
+        </div>
+      </div>
+
+      <div class="dcf-wae-divider"><span>capital structure weights</span></div>
+
+      <div class="dcf-wae-cap-row">
+        <div class="dcf-wae-cell">
+          <label class="dcf-wae-lbl">Kd — Cost of debt (after-tax)</label>
+          <div class="dcf-wae-inp-wrap">
+            <input type="number" id="${tk}-dcf-kd"   class="dcf-wae-inp" value="${kdVal}"   step="0.1"  min="0"  max="30"  oninput="_updateWACCFromCAPM('${tk}')">
+            <span class="dcf-wae-unit">%</span>
+          </div>
+          <div class="dcf-wae-hint">Interest × (1 − tax rate)</div>
+        </div>
+        <div class="dcf-wae-cell">
+          <label class="dcf-wae-lbl">We — Equity weight</label>
+          <div class="dcf-wae-inp-wrap">
+            <input type="number" id="${tk}-dcf-we"   class="dcf-wae-inp" value="${weVal}"   step="1"    min="0"  max="100" oninput="_updateWACCFromCAPM('${tk}')">
+            <span class="dcf-wae-unit">%</span>
+          </div>
+          <div class="dcf-wae-hint">E/(E+D) by market value</div>
+        </div>
+        <div class="dcf-wae-cell dcf-wae-computed">
+          <label class="dcf-wae-lbl">Wd — Debt weight</label>
+          <div class="dcf-wae-computed-val" id="${tk}-dcf-wd-disp">${wdValN}%</div>
+          <div class="dcf-wae-hint">= 100 − We</div>
+        </div>
+        <div class="dcf-wae-wacc-banner">
+          <div class="dcf-wae-wacc-formula">WACC = Ke × We + Kd × Wd</div>
+          <div class="dcf-wae-wacc-val" id="${tk}-dcf-capm-wacc">${waccInitVal}%</div>
+          <div class="dcf-wae-wacc-note">↓ auto-populates field below</div>
+        </div>
+      </div>
+    </div>`;
 
   // ── Growth stage rail ──
   const impliedGTag = _impliedGrowthTagHTML(d);
@@ -1142,47 +1209,130 @@ function _dcfCardHTML(tk, d) {
   const bullWacc = Math.max(4.0, waccSugg-1.0).toFixed(1);
 
   const scenarioHTML = `
-    <div class="val-scenario-section">
-      <div class="val-scenario-title">
-        Scenarios &amp; Probability-Weighted Fair Value
-        <span class="val-scenario-hint">Bear/Bull inherit your base inputs but with different growth &amp; WACC. Adjust probabilities to weight the outcome.</span>
+    <div class="scn-wrap">
+      <div class="scn-header">
+        <div class="scn-header-title">Scenarios &amp; Probability-Weighted Fair Value</div>
+        <div class="scn-header-sub">Bear/Bull inherit your base assumptions with adjusted growth &amp; WACC. Set probabilities to weight the expected outcome.</div>
       </div>
-      <table class="val-scenario-table">
-        <thead><tr><th></th><th>g₁ %</th><th>g₂ %</th><th>Tg %</th><th>WACC %</th><th>Prob %</th><th>Fair Value</th></tr></thead>
-        <tbody>
-          <tr class="scn-bear">
-            <th>🐻 Bear</th>
-            <td><input type="number" id="${tk}-dcf-bear-g1"   value="${bearG1}"   step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bear-g2"   value="${bearG2}"   step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bear-tg"   value="1.5"         step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bear-wacc" value="${bearWacc}"  step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bear-p"    value="25"           step="5" min="0" max="100"></td>
-            <td class="scn-fv" id="res-${tk}-dcf-bear">—</td>
-          </tr>
-          <tr class="scn-base">
-            <th>➡️ Base</th>
-            <td colspan="4" class="scn-base-note">Uses main inputs (Steps 1–4 above)</td>
-            <td><input type="number" id="${tk}-dcf-base-p"    value="50"           step="5" min="0" max="100"></td>
-            <td class="scn-fv" id="res-${tk}-dcf-base">—</td>
-          </tr>
-          <tr class="scn-bull">
-            <th>🐂 Bull</th>
-            <td><input type="number" id="${tk}-dcf-bull-g1"   value="${bullG1}"   step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bull-g2"   value="${bullG2}"   step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bull-tg"   value="3.0"         step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bull-wacc" value="${bullWacc}"  step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bull-p"    value="25"           step="5" min="0" max="100"></td>
-            <td class="scn-fv" id="res-${tk}-dcf-bull">—</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <th colspan="5" class="scn-weighted-lbl">Probability-Weighted Fair Value</th>
-            <td id="res-${tk}-dcf-pw-sum" class="scn-pw-sum">—</td>
-            <td id="res-${tk}-dcf-pw" class="scn-pw">—</td>
-          </tr>
-        </tfoot>
-      </table>
+
+      <div class="scn-cards">
+        <!-- Bear card -->
+        <div class="scn-card scn-card-bear">
+          <div class="scn-card-hdr">
+            <span class="scn-card-icon">🐻</span>
+            <div>
+              <div class="scn-card-title">Bear Case</div>
+              <div class="scn-card-sub">Pessimistic — slower growth, higher risk</div>
+            </div>
+          </div>
+          <div class="scn-card-inputs">
+            <div class="scn-inp-row">
+              <label>Stage 1 growth</label>
+              <input type="number" id="${tk}-dcf-bear-g1" value="${bearG1}" step="0.5">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>Stage 2 growth</label>
+              <input type="number" id="${tk}-dcf-bear-g2" value="${bearG2}" step="0.5">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>Terminal growth</label>
+              <input type="number" id="${tk}-dcf-bear-tg" value="1.5" step="0.1">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>WACC</label>
+              <input type="number" id="${tk}-dcf-bear-wacc" value="${bearWacc}" step="0.1">
+              <span class="scn-unit">%</span>
+            </div>
+          </div>
+          <div class="scn-card-prob">
+            <label>Probability</label>
+            <input type="number" id="${tk}-dcf-bear-p" value="25" step="5" min="0" max="100">
+            <span class="scn-unit">%</span>
+          </div>
+          <div class="scn-card-fv">
+            <div class="scn-card-fv-lbl">Fair Value</div>
+            <div class="scn-card-fv-val" id="res-${tk}-dcf-bear">—</div>
+          </div>
+        </div>
+
+        <!-- Base card -->
+        <div class="scn-card scn-card-base">
+          <div class="scn-card-hdr">
+            <span class="scn-card-icon">➡️</span>
+            <div>
+              <div class="scn-card-title">Base Case</div>
+              <div class="scn-card-sub">Your main inputs from Steps 1–4</div>
+            </div>
+          </div>
+          <div class="scn-card-inputs scn-base-locked">
+            <div class="scn-base-note">Growth, WACC and capital structure locked to your main inputs above. Adjust Steps 1–4 to change the base case.</div>
+          </div>
+          <div class="scn-card-prob">
+            <label>Probability</label>
+            <input type="number" id="${tk}-dcf-base-p" value="50" step="5" min="0" max="100">
+            <span class="scn-unit">%</span>
+          </div>
+          <div class="scn-card-fv">
+            <div class="scn-card-fv-lbl">Fair Value</div>
+            <div class="scn-card-fv-val" id="res-${tk}-dcf-base">—</div>
+          </div>
+        </div>
+
+        <!-- Bull card -->
+        <div class="scn-card scn-card-bull">
+          <div class="scn-card-hdr">
+            <span class="scn-card-icon">🐂</span>
+            <div>
+              <div class="scn-card-title">Bull Case</div>
+              <div class="scn-card-sub">Optimistic — stronger growth, lower risk</div>
+            </div>
+          </div>
+          <div class="scn-card-inputs">
+            <div class="scn-inp-row">
+              <label>Stage 1 growth</label>
+              <input type="number" id="${tk}-dcf-bull-g1" value="${bullG1}" step="0.5">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>Stage 2 growth</label>
+              <input type="number" id="${tk}-dcf-bull-g2" value="${bullG2}" step="0.5">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>Terminal growth</label>
+              <input type="number" id="${tk}-dcf-bull-tg" value="3.0" step="0.1">
+              <span class="scn-unit">%</span>
+            </div>
+            <div class="scn-inp-row">
+              <label>WACC</label>
+              <input type="number" id="${tk}-dcf-bull-wacc" value="${bullWacc}" step="0.1">
+              <span class="scn-unit">%</span>
+            </div>
+          </div>
+          <div class="scn-card-prob">
+            <label>Probability</label>
+            <input type="number" id="${tk}-dcf-bull-p" value="25" step="5" min="0" max="100">
+            <span class="scn-unit">%</span>
+          </div>
+          <div class="scn-card-fv">
+            <div class="scn-card-fv-lbl">Fair Value</div>
+            <div class="scn-card-fv-val" id="res-${tk}-dcf-bull">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual bar chart: fair values vs current price -->
+      <div class="scn-chart-wrap" id="scn-chart-${tk}"></div>
+
+      <!-- Probability-weighted footer -->
+      <div class="scn-pw-footer">
+        <div class="scn-pw-lbl">Probability-Weighted Fair Value</div>
+        <div class="scn-pw-psum" id="res-${tk}-dcf-pw-sum">Σ = —</div>
+        <div class="scn-pw-val" id="res-${tk}-dcf-pw">—</div>
+      </div>
     </div>`;
 
   const body = `
@@ -1213,8 +1363,8 @@ function _dcfCardHTML(tk, d) {
       'The rate that converts future cash to today\'s dollars. Higher WACC = lower fair value. Every 1 pp change in WACC typically moves the DCF result by 15–25%.',
       `${waccBreakdown}
        <div class="dcf-two-col">
-         ${_dcfInp(`${tk}-dcf-wacc`, 'WACC (%)', d.wacc_suggestion,
-           'Override the CAPM-derived WACC above if you believe the model mis-prices risk for this business (e.g. distressed firms, emerging markets).', '0.1', '3', '30')}
+         ${_dcfInp(`${tk}-dcf-wacc`, 'WACC — auto from CAPM above (%)', d.wacc_suggestion,
+           'Auto-populated from the CAPM inputs above. Edit CAPM inputs to recompute, or type here to manually override for distressed firms, emerging markets, or custom risk profiles.', '0.1', '3', '30')}
          ${_dcfInp(`${tk}-dcf-mos`, 'Margin of Safety (%)', '15',
            'A deliberate discount on the final equity value — your buffer against model error, optimistic inputs, and unknown unknowns. Graham used 33–50%; Buffett uses ~25%.', '1', '0', '50')}
        </div>`)}
@@ -1239,25 +1389,18 @@ function _dcfCardHTML(tk, d) {
       'Model three futures: a pessimistic bear case, your base case (Steps 1–4), and an optimistic bull case. Weight them by probability to get an expected fair value.',
       scenarioHTML)}
 
-    <details class="val-mc-wrap" id="mc-wrap-${tk}">
-      <summary>
-        <span class="dcf-mc-label">Step 6 — Monte Carlo Simulation</span>
-        <span class="dcf-mc-sub">Randomise growth &amp; WACC across 500 runs to model uncertainty as a distribution</span>
-      </summary>
-      <div class="val-mc-body">
-        <div class="val-mc-note">Each run samples Stage-1 growth and WACC from a Normal distribution centred on your inputs. The histogram shows where most outcomes cluster — P50 is the median fair value.</div>
-        <div class="dcf-two-col" style="margin-bottom:8px;">
-          ${_dcfInp(`${tk}-dcf-gstd`, 'Growth uncertainty σ (%)', '8',
-            'Standard deviation on Stage-1 growth. 8% means ~68% of runs fall within ±8pp of your Stage-1 input.', '0.5', '0', '30')}
-          ${_dcfInp(`${tk}-dcf-wstd`, 'WACC uncertainty σ (%)', '1.5',
-            'Standard deviation on WACC. 1.5% means ~68% of runs fall within ±1.5pp of your WACC.', '0.25', '0', '10')}
+    ${_dcfStep(6, 'Monte Carlo Simulation',
+      '500 runs sampling growth and WACC from normal distributions — models your input uncertainty as a full outcome distribution rather than a single point estimate.',
+      `<div class="dcf-two-col" style="margin-bottom:12px;">
+          ${_dcfInp(`${tk}-dcf-gstd`, 'Growth σ — Stage 1 uncertainty (%)', '8',
+            'Standard deviation on Stage-1 growth. 8% means ~68% of simulated runs fall within ±8pp of your Stage-1 input. Higher = wider distribution, more uncertainty.', '0.5', '0', '30')}
+          ${_dcfInp(`${tk}-dcf-wstd`, 'WACC σ — discount rate uncertainty (%)', '1.5',
+            'Standard deviation on WACC. 1.5% means ~68% of runs fall within ±1.5pp of your WACC. Models estimation error in your cost of capital.', '0.25', '0', '10')}
         </div>
-        <div id="mc-out-${tk}" class="val-mc-out"></div>
-      </div>
-    </details>`;
+        <div id="mc-out-${tk}" class="val-mc-out"></div>`)}`;
 
   return _cardWrap('dcf', tk, 'Discounted Cash Flow (DCF)',
-    '4-step model: baseline FCF → growth projections → discount rate → capital structure → fair value',
+    '6-step model: cash flow baseline → growth projections → editable WACC/CAPM → capital structure → scenarios → Monte Carlo',
     body);
 }
 
@@ -1987,6 +2130,36 @@ function _ncavCardHTML(tk, d) {
     body);
 }
 
+// ── WACC live recompute from editable CAPM inputs ────────────────────────────
+
+function _updateWACCFromCAPM(tk) {
+  const rfEl   = document.getElementById(`${tk}-dcf-rf`);
+  const betaEl = document.getElementById(`${tk}-dcf-beta`);
+  const erpEl  = document.getElementById(`${tk}-dcf-erp`);
+  const kdEl   = document.getElementById(`${tk}-dcf-kd`);
+  const weEl   = document.getElementById(`${tk}-dcf-we`);
+  if (!rfEl || !betaEl || !erpEl || !kdEl || !weEl) return;
+
+  const rf   = parseFloat(rfEl.value)   || 0;
+  const beta = parseFloat(betaEl.value) || 0;
+  const erp  = parseFloat(erpEl.value)  || 0;
+  const kd   = parseFloat(kdEl.value)   || 0;
+  const we   = Math.min(100, Math.max(0, parseFloat(weEl.value) || 0));
+  const wd   = 100 - we;
+
+  const ke   = rf + beta * erp;
+  const wacc = (ke * we + kd * wd) / 100;
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set(`${tk}-dcf-ke-disp`, ke.toFixed(2) + '%');
+  set(`${tk}-dcf-wd-disp`, wd.toFixed(1) + '%');
+  set(`${tk}-dcf-capm-wacc`, wacc.toFixed(2) + '%');
+
+  // Auto-populate the main WACC input used by _calcDCF
+  const waccInp = document.getElementById(`${tk}-dcf-wacc`);
+  if (waccInp) waccInp.value = wacc.toFixed(2);
+}
+
 // ── E1: Monte Carlo DCF ───────────────────────────────────────────────────────
 
 function _normalSample(mean, std) {
@@ -2009,81 +2182,119 @@ function _renderDCFMonteCarlo(tk, fcffPs, g1, g2, tg, wacc, mos, ndPs, price, cu
   }
 
   const N = 500;
-  const results = [];
+  const simResults = [];
   for (let i = 0; i < N; i++) {
-    const sg1  = _normalSample(g1, gStd);
-    const sg2  = _normalSample(g2, gStd * 0.6);
-    const sw   = Math.max(0.03, _normalSample(wacc, wStd));
-    const stg  = Math.min(tg, sw - 0.005);
-    const fv   = _calcDCF(fcffPs, sg1, sg2, stg, sw, mos, ndPs);
-    if (fv !== null && fv > 0 && fv < price * 20) results.push(fv);
+    const sg1 = _normalSample(g1,  gStd);
+    const sg2 = _normalSample(g2,  gStd * 0.6);
+    const sw  = Math.max(0.03, _normalSample(wacc, wStd));
+    const stg = Math.min(tg, sw - 0.005);
+    const fv  = _calcDCF(fcffPs, sg1, sg2, stg, sw, mos, ndPs);
+    if (fv !== null && fv > 0 && fv < price * 30) simResults.push(fv);
   }
 
-  if (results.length < 10) {
+  if (simResults.length < 10) {
     outEl.innerHTML = '<div class="val-mc-na">Too few valid simulations — check inputs.</div>';
     return;
   }
 
-  results.sort((a, b) => a - b);
-  const n = results.length;
-  const pct = (p) => results[Math.min(n - 1, Math.max(0, Math.round(p * n / 100)))];
+  simResults.sort((a, b) => a - b);
+  const n = simResults.length;
+  const pct = (p) => simResults[Math.min(n - 1, Math.max(0, Math.round(p * n / 100)))];
   const p10 = pct(10), p25 = pct(25), p50 = pct(50), p75 = pct(75), p90 = pct(90);
 
-  // Build histogram (24 buckets)
-  const lo = results[0], hi = results[n - 1];
-  const BINS = 24;
-  const bw = (hi - lo) / BINS || 1;
+  // Probability of undervaluation = fraction of runs where FV > current price
+  const probUnder = price > 0 ? simResults.filter(v => v > price).length / n : null;
+
+  // Build histogram (40 bins, full-width SVG)
+  const lo = simResults[0], hi = simResults[n - 1];
+  const BINS = 40;
+  const bw  = (hi - lo) / BINS || 1;
   const buckets = Array(BINS).fill(0);
-  results.forEach(v => {
+  simResults.forEach(v => {
     const b = Math.min(BINS - 1, Math.floor((v - lo) / bw));
     buckets[b]++;
   });
   const maxB = Math.max(...buckets);
 
-  // SVG histogram
-  const W = 280, H = 64, pad = 2;
-  const bWidth = (W - pad * 2) / BINS;
-  const bars = buckets.map((cnt, i) => {
-    const x = pad + i * bWidth;
-    const bh = cnt > 0 ? Math.max(2, (cnt / maxB) * (H - 16)) : 0;
-    const y = H - 16 - bh;
-    // colour by position relative to price
+  // SVG dimensions — wide, tall histogram
+  const W = 600, H = 130, padL = 4, padR = 4, padT = 6, labH = 18;
+  const chartH = H - labH - padT;
+  const bWidth  = (W - padL - padR) / BINS;
+
+  // Histogram bars
+  const svgBars = buckets.map((cnt, i) => {
+    const x  = padL + i * bWidth;
+    const bh = cnt > 0 ? Math.max(2, (cnt / maxB) * chartH) : 0;
+    const y  = padT + chartH - bh;
     const midVal = lo + (i + 0.5) * bw;
-    const col = midVal < price ? '#f87171' : (midVal < p50 ? '#fbbf24' : '#6ee7b7');
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bWidth - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}" opacity="0.8"/>`;
+    // red below price, amber in lower half above price, emerald in upper half
+    const col = midVal < price
+      ? '#f87171'
+      : (midVal < p50 ? '#fbbf24' : '#34d399');
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bWidth - 0.8).toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}" opacity="0.85" rx="1"/>`;
   }).join('');
 
-  // Price line
-  const priceX = Math.max(0, Math.min(W, pad + ((price - lo) / (hi - lo + 1e-10)) * (W - pad * 2)));
-  const priceLine = `<line x1="${priceX.toFixed(1)}" y1="0" x2="${priceX.toFixed(1)}" y2="${H - 16}" stroke="#e879f9" stroke-width="1.5" stroke-dasharray="3,2"/>`;
-  const priceLabel = `<text x="${priceX.toFixed(1)}" y="${H - 2}" text-anchor="middle" font-size="8" fill="#e879f9">Price</text>`;
+  // Helper: x-coordinate from value
+  const xOf = (v) => padL + ((v - lo) / (hi - lo + 1e-10)) * (W - padL - padR);
 
-  // P50 line
-  const p50X = pad + ((p50 - lo) / (hi - lo + 1e-10)) * (W - pad * 2);
-  const p50Line = `<line x1="${p50X.toFixed(1)}" y1="0" x2="${p50X.toFixed(1)}" y2="${H - 16}" stroke="var(--fg)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>`;
+  // Percentile marker lines + labels
+  const plines = [
+    { v: p10, lbl: 'P10', col: '#f87171' },
+    { v: p25, lbl: 'P25', col: '#fbbf24' },
+    { v: p50, lbl: 'P50', col: '#818cf8' },
+    { v: p75, lbl: 'P75', col: '#34d399' },
+    { v: p90, lbl: 'P90', col: '#6ee7b7' },
+  ].map(({ v, lbl, col }) => {
+    const x = xOf(v).toFixed(1);
+    return `
+      <line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + chartH}" stroke="${col}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.9"/>
+      <text x="${x}" y="${padT - 1}" text-anchor="middle" font-size="9" fill="${col}" font-weight="600">${lbl}</text>`;
+  }).join('');
 
-  const svg = `<svg class="val-mc-hist" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    ${bars}${priceLine}${p50Line}${priceLabel}
-    <text x="${pad}" y="${H - 2}" text-anchor="start" font-size="8" fill="var(--muted)">${_fp(lo, cur)}</text>
-    <text x="${W - pad}" y="${H - 2}" text-anchor="end" font-size="8" fill="var(--muted)">${_fp(hi, cur)}</text>
+  // Current price vertical line
+  let priceLine = '', priceLabel = '';
+  if (price > 0 && price >= lo && price <= hi) {
+    const px = xOf(price).toFixed(1);
+    priceLine  = `<line x1="${px}" y1="${padT}" x2="${px}" y2="${padT + chartH}" stroke="#e879f9" stroke-width="2" stroke-dasharray="3,2"/>`;
+    priceLabel = `<text x="${px}" y="${H - 2}" text-anchor="middle" font-size="9" fill="#e879f9" font-weight="700">Price</text>`;
+  }
+
+  // Axis labels
+  const loLbl  = `<text x="${padL}"     y="${H - 2}" text-anchor="start" font-size="9" fill="var(--muted)">${_fp(lo, cur)}</text>`;
+  const hiLbl  = `<text x="${W - padR}" y="${H - 2}" text-anchor="end"   font-size="9" fill="var(--muted)">${_fp(hi, cur)}</text>`;
+
+  const svg = `<svg class="val-mc-hist" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    ${svgBars}${priceLine}${plines}${priceLabel}${loLbl}${hiLbl}
   </svg>`;
 
+  // Stats row
   const pctFmt = (v) => {
     if (!price || price <= 0) return '';
-    const d = ((v - price) / price) * 100;
-    return `<span class="${d >= 0 ? 'pos' : 'neg'}" style="font-size:9px;margin-left:3px;">(${d >= 0 ? '+' : ''}${d.toFixed(0)}%)</span>`;
+    const diff = ((v - price) / price) * 100;
+    return `<span class="${diff >= 0 ? 'pos' : 'neg'}">(${diff >= 0 ? '+' : ''}${diff.toFixed(0)}%)</span>`;
   };
 
+  const probHtml = probUnder !== null
+    ? `<div class="val-mc-stat val-mc-stat-prob">
+         <span class="val-mc-stat-lbl">Prob. undervalued</span>
+         <span class="val-mc-stat-val ${probUnder >= 0.5 ? 'pos' : 'neg'}">${(probUnder * 100).toFixed(0)}%</span>
+       </div>`
+    : '';
+
   outEl.innerHTML = `
+    <div class="val-mc-desc">
+      <strong>What you're looking at:</strong> Each of the ${n} simulated runs samples Stage-1 growth (σ = ±${(gStd*100).toFixed(1)}pp) and WACC (σ = ±${(wStd*100).toFixed(1)}pp) from normal distributions centred on your inputs. The histogram shows the distribution of fair value outcomes. <span style="color:#f87171">■</span> red bins = below current price (overvalued in that run), <span style="color:#34d399">■</span> green bins = above current price (undervalued). The P50 median is your most likely fair value under this uncertainty model.
+    </div>
     ${svg}
     <div class="val-mc-stats">
-      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P10</span><span class="val-mc-stat-val">${_fp(p10, cur)}${pctFmt(p10)}</span></div>
-      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P25</span><span class="val-mc-stat-val">${_fp(p25, cur)}${pctFmt(p25)}</span></div>
-      <div class="val-mc-stat val-mc-median"><span class="val-mc-stat-lbl">P50 (median)</span><span class="val-mc-stat-val">${_fp(p50, cur)}${pctFmt(p50)}</span></div>
-      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P75</span><span class="val-mc-stat-val">${_fp(p75, cur)}${pctFmt(p75)}</span></div>
-      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P90</span><span class="val-mc-stat-val">${_fp(p90, cur)}${pctFmt(p90)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P10 (bear)</span><span class="val-mc-stat-val">${_fp(p10, cur)} ${pctFmt(p10)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P25</span><span class="val-mc-stat-val">${_fp(p25, cur)} ${pctFmt(p25)}</span></div>
+      <div class="val-mc-stat val-mc-median"><span class="val-mc-stat-lbl">P50 — median</span><span class="val-mc-stat-val">${_fp(p50, cur)} ${pctFmt(p50)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P75</span><span class="val-mc-stat-val">${_fp(p75, cur)} ${pctFmt(p75)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P90 (bull)</span><span class="val-mc-stat-val">${_fp(p90, cur)} ${pctFmt(p90)}</span></div>
+      ${probHtml}
     </div>
-    <div class="val-mc-caption">${results.length} valid runs · purple line = market price · white dashed = P50 base case</div>`;
+    <div class="val-mc-caption">${n} valid runs of ${N} · pink line = current price · coloured dashes = percentiles</div>`;
 }
 
 // ── E2: Piotroski F-Score + Altman Z-Score deep-dive card ────────────────────
@@ -2293,6 +2504,9 @@ function _recalcTicker(tk) {
   const cur   = d.currency;
 
   const results = {};
+
+  // Recompute WACC from editable CAPM inputs before reading dcf-wacc
+  _updateWACCFromCAPM(tk);
 
   // DCF
   const dcfFcf     = _gv(`${tk}-dcf-fcf`);
@@ -2580,8 +2794,8 @@ function _recalcDCFScenarios(tk, fcffPs, baseG1, baseG2, baseTg, baseWacc, mos, 
     const b   = _calcDCFBreakdown(fcffPs, bG1, bG2, bTg, bW, mos, ndPs);
     return { fv: b ? b.fairValue : null, p: bP };
   };
-  const bear = read('bear');
-  const bull = read('bull');
+  const bear  = read('bear');
+  const bull  = read('bull');
   const baseP = Math.max(0, _gv(`${tk}-dcf-base-p`));
   const base  = { fv: baseFV, p: baseP };
 
@@ -2595,13 +2809,14 @@ function _recalcDCFScenarios(tk, fcffPs, baseG1, baseG2, baseTg, baseWacc, mos, 
   const totP = bear.p + base.p + bull.p;
   const sumEl = document.getElementById(`res-${tk}-dcf-pw-sum`);
   if (sumEl) {
-    sumEl.textContent = `Σp=${totP.toFixed(0)}%`;
-    sumEl.className = 'scn-pw-sum ' + (Math.abs(totP - 100) < 1 ? 'ok' : 'warn');
+    sumEl.textContent = `Σ = ${totP.toFixed(0)}%`;
+    sumEl.className = 'scn-pw-psum ' + (Math.abs(totP - 100) < 1 ? 'ok' : 'warn');
   }
   const pwEl = document.getElementById(`res-${tk}-dcf-pw`);
   if (!pwEl) return;
   if (totP <= 0 || (bear.fv === null && base.fv === null && bull.fv === null)) {
     pwEl.textContent = '—';
+    _renderScenarioChart(tk, bear.fv, base.fv, bull.fv, null, cur);
     return;
   }
   let weighted = 0, weightUsed = 0;
@@ -2611,9 +2826,53 @@ function _recalcDCFScenarios(tk, fcffPs, baseG1, baseG2, baseTg, baseWacc, mos, 
       weightUsed += (s.p / totP);
     }
   }
-  // Re-normalize if some scenarios failed
   if (weightUsed > 0) weighted = weighted / weightUsed;
-  pwEl.textContent = _fp(r2(weighted), cur);
+  const pwFV = r2(weighted);
+  pwEl.textContent = _fp(pwFV, cur);
+
+  // Visual bar chart
+  const price = _vStocks[tk]?.data?.current_price || 0;
+  _renderScenarioChart(tk, bear.fv, base.fv, bull.fv, price, cur);
+}
+
+function _renderScenarioChart(tk, bearFV, baseFV, bullFV, price, cur) {
+  const el = document.getElementById(`scn-chart-${tk}`);
+  if (!el) return;
+
+  const scenarios = [
+    { label: 'Bear', fv: bearFV, color: '#f87171' },
+    { label: 'Base', fv: baseFV, color: '#818cf8' },
+    { label: 'Bull', fv: bullFV, color: '#34d399' },
+  ].filter(s => s.fv !== null && s.fv !== undefined && s.fv > 0);
+
+  if (!scenarios.length) { el.innerHTML = ''; return; }
+
+  const allVals = scenarios.map(s => s.fv).concat(price > 0 ? [price] : []);
+  const maxVal = Math.max(...allVals) * 1.12;
+
+  const bars = scenarios.map(s => {
+    const pct = Math.min(100, (s.fv / maxVal) * 100);
+    const pricePct = price > 0 ? Math.min(100, (price / maxVal) * 100) : null;
+    const fmtd = _fp(s.fv, cur);
+    const mosSign = price > 0 ? (s.fv > price ? '+' : '') : '';
+    const mosPct  = price > 0 ? ((s.fv - price) / price * 100).toFixed(0) + '%' : '';
+    const mosCls  = price > 0 ? (s.fv > price ? 'pos' : 'neg') : '';
+    return `
+      <div class="scn-bar-row">
+        <div class="scn-bar-label">${s.label}</div>
+        <div class="scn-bar-track">
+          <div class="scn-bar-fill" style="width:${pct.toFixed(1)}%;background:${s.color};"></div>
+          ${pricePct !== null ? `<div class="scn-bar-price-line" style="left:${pricePct.toFixed(1)}%;"></div>` : ''}
+        </div>
+        <div class="scn-bar-val">${fmtd} ${mosPct ? `<span class="${mosCls}" style="font-size:10px;">(${mosSign}${mosPct})</span>` : ''}</div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="scn-chart-inner">
+      ${bars}
+      ${price > 0 ? `<div class="scn-chart-price-note">— current price ${_fp(price, cur)}</div>` : ''}
+    </div>`;
 }
 
 // ── B2: Reverse-DCF extras (implied-g curve + TV-share gauge) ────────────────
