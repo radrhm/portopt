@@ -1005,116 +1005,173 @@ function _inp(id, label, val, hint, step='0.01', min='', max='') {
   </div>`;
 }
 
+// ── DCF step-segment helper ───────────────────────────────────────────────────
+function _dcfStep(num, title, desc, bodyHTML) {
+  return `
+  <div class="dcf-step">
+    <div class="dcf-step-hdr">
+      <div class="dcf-step-num">${num}</div>
+      <div class="dcf-step-meta">
+        <div class="dcf-step-title">${title}</div>
+        <div class="dcf-step-desc">${desc}</div>
+      </div>
+    </div>
+    <div class="dcf-step-body">${bodyHTML}</div>
+  </div>`;
+}
+
+// ── DCF large input helper ────────────────────────────────────────────────────
+function _dcfInp(id, label, val, hint, step='1', min='', max='') {
+  const minA = min !== '' ? `min="${min}"` : '';
+  const maxA = max !== '' ? `max="${max}"` : '';
+  return `<div class="dcf-inp-wrap">
+    <label class="dcf-inp-lbl">${label}</label>
+    <input type="number" id="${id}" value="${val}" step="${step}" ${minA} ${maxA} class="dcf-inp"/>
+    <div class="dcf-inp-hint">${hint}</div>
+  </div>`;
+}
+
 // 1. DCF ───────────────────────────────────────────────────────────────────────
 function _dcfCardHTML(tk, d) {
   const g1  = Math.min(d.earnings_growth_pct, 40).toFixed(1);
   const g2  = Math.min(d.earnings_growth_pct * 0.6, 25).toFixed(1);
-  const fcfData = d.historical_fcf.slice(0, 4);  // last 4 years (newest→oldest)
+  const fcfData = d.historical_fcf.slice(0, 4);
 
-  // FCF YoY row — show growth rate (%); the oldest row has no prior year so blank
+  // ── FCF history table ──
   const fmtYoY = (r) => {
     if (r.yoy_pct === undefined || r.yoy_pct === null) return '<span class="val-muted">—</span>';
-    const v = r.yoy_pct;
-    const cls = v >= 0 ? 'pos' : 'neg';
+    const v = r.yoy_pct, cls = v >= 0 ? 'pos' : 'neg';
     return `<span class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
   };
 
-  // 4-year FCF CAGR summary (if we have 4+ rows)
-  let cagrHTML = '';
+  let cagrText = '';
   if (fcfData.length >= 3) {
-    const newest = fcfData[0].fcf_m;
-    const oldest = fcfData[fcfData.length - 1].fcf_m;
-    const yrs    = fcfData.length - 1;
+    const newest = fcfData[0].fcf_m, oldest = fcfData[fcfData.length-1].fcf_m, yrs = fcfData.length-1;
     if (oldest > 0 && newest > 0) {
-      const cagr = (Math.pow(newest / oldest, 1 / yrs) - 1) * 100;
-      const cls = cagr >= 0 ? 'pos' : 'neg';
-      cagrHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">
-        <strong>${yrs}-yr FCF CAGR:</strong> <span class="${cls}">${cagr >= 0 ? '+' : ''}${cagr.toFixed(1)}%/yr</span>
-        · Historical growth feeds your Stage-1 & Stage-2 assumptions below.
-      </div>`;
+      const cagr = (Math.pow(newest/oldest, 1/yrs)-1)*100;
+      cagrText = `${yrs}-yr FCF CAGR: <span class="${cagr>=0?'pos':'neg'}">${cagr>=0?'+':''}${cagr.toFixed(1)}%/yr</span>`;
     }
   }
 
-  const fcfHistory = fcfData.length
-    ? `${cagrHTML}
-       <table class="val-fcf-table">
-        <thead><tr>
-          <th>Year</th>
-          <th>Op. CF ($M)</th>
-          <th>CapEx ($M)</th>
-          <th>FCF ($M)</th>
-          <th title="Stock-Based Compensation added back via cashflow">SBC ($M)</th>
-          <th title="Free Cash Flow minus Stock-Based Compensation — Buffett's owner earnings approximation">Owner Earnings ($M)</th>
-          <th>YoY (FCF)</th>
-        </tr></thead>
-        <tbody>${fcfData.map(r => `
-          <tr>
-            <td>${r.year}</td>
-            <td>${(r.op_cf_m ?? 0).toLocaleString()}</td>
-            <td class="neg">${(r.capex_m ?? 0).toLocaleString()}</td>
-            <td class="${r.fcf_m >= 0 ? 'pos' : 'neg'}">${r.fcf_m.toLocaleString()}</td>
-            <td class="neg">${r.sbc_m ? r.sbc_m.toLocaleString() : '—'}</td>
-            <td class="${(r.owner_earnings_m ?? r.fcf_m) >= 0 ? 'pos' : 'neg'}">${r.owner_earnings_m !== undefined ? r.owner_earnings_m.toLocaleString() : '—'}</td>
-            <td>${fmtYoY(r)}</td>
-          </tr>`).join('')}
-        </tbody></table>`
-    : `<div class="val-note" style="margin-bottom:8px;">No historical cash flow data available.</div>`;
+  const fcfTable = fcfData.length ? `
+    <table class="val-fcf-table">
+      <thead><tr>
+        <th>Year</th><th>Op. CF ($M)</th><th>CapEx ($M)</th><th>FCF ($M)</th>
+        <th title="Stock-Based Comp">SBC ($M)</th>
+        <th title="FCF − SBC ≈ Buffett owner earnings">Owner Earnings ($M)</th>
+        <th>YoY</th>
+      </tr></thead>
+      <tbody>${fcfData.map(r => `
+        <tr>
+          <td><strong>${r.year}</strong></td>
+          <td>${(r.op_cf_m??0).toLocaleString()}</td>
+          <td class="neg">${(r.capex_m??0).toLocaleString()}</td>
+          <td class="${r.fcf_m>=0?'pos':'neg'}">${r.fcf_m.toLocaleString()}</td>
+          <td class="neg">${r.sbc_m?r.sbc_m.toLocaleString():'—'}</td>
+          <td class="${(r.owner_earnings_m??r.fcf_m)>=0?'pos':'neg'}">${r.owner_earnings_m!==undefined?r.owner_earnings_m.toLocaleString():'—'}</td>
+          <td>${fmtYoY(r)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : `<div class="val-note">No historical cash flow data available.</div>`;
 
-  // Owner-earnings fill button helper (inline JS)
-  const oeBtn = d.owner_earnings_m !== undefined
-    ? `<button class="val-oe-btn" onclick="document.getElementById('${tk}-dcf-fcf').value='${d.owner_earnings_m}';document.getElementById('${tk}-dcf-fcf').dispatchEvent(new Event('input'));" title="Switch base cash flow to Owner Earnings (FCF − SBC ≈ Buffett's owner earnings)">Use Owner Earnings (${d.owner_earnings_m}M)</button>`
+  const oeBtnVal = d.owner_earnings_m ?? '';
+  const oeBtn = oeBtnVal !== ''
+    ? `<button class="val-oe-btn" onclick="document.getElementById('${tk}-dcf-fcf').value='${oeBtnVal}';document.getElementById('${tk}-dcf-fcf').dispatchEvent(new Event('input'));">
+        ↺ Use Owner Earnings (${oeBtnVal}M) — FCF minus SBC
+       </button>`
     : '';
-  const fcffNote = `<div class="val-note" style="margin-bottom:4px;">
-    Model: FCFF discounted at WACC → Enterprise Value → subtract Net Debt → Equity Value ÷ Shares.
-    ${oeBtn}
-    ${_impliedGrowthTagHTML(d)}
-  </div>`;
 
-  // Bear / Bull defaults (Base is tied to the main inputs above)
+  // ── WACC breakdown ──
+  const wd = d.wacc_detail || {};
+  const waccBreakdown = wd.ke ? `
+    <div class="dcf-wacc-box">
+      <div class="dcf-wacc-title">CAPM breakdown — how this WACC was calculated</div>
+      <div class="dcf-wacc-grid">
+        <div class="dcf-wacc-row"><span class="dcf-wk">Risk-free rate (Rf)</span><span class="dcf-wv">${wd.rf}%</span><span class="dcf-wh">10-yr govt bond yield</span></div>
+        <div class="dcf-wacc-row"><span class="dcf-wk">Beta (β)</span><span class="dcf-wv">${wd.beta}</span><span class="dcf-wh">Market sensitivity (1.0 = market)</span></div>
+        <div class="dcf-wacc-row"><span class="dcf-wk">Equity Risk Premium (ERP)</span><span class="dcf-wv">${wd.erp}%</span><span class="dcf-wh">Extra return required vs risk-free</span></div>
+        <div class="dcf-wacc-row dcf-wacc-sub"><span class="dcf-wk">Cost of Equity (Ke = Rf + β×ERP)</span><span class="dcf-wv ke">${wd.ke}%</span><span class="dcf-wh">Return required by equity holders</span></div>
+        <div class="dcf-wacc-row"><span class="dcf-wk">Cost of Debt after-tax (Kd)</span><span class="dcf-wv">${wd.kd_aftertax}%</span><span class="dcf-wh">Interest rate × (1 − tax rate)</span></div>
+        <div class="dcf-wacc-row"><span class="dcf-wk">Capital weights (Equity / Debt)</span><span class="dcf-wv">${wd.weight_equity}% / ${wd.weight_debt}%</span><span class="dcf-wh">By market value</span></div>
+        <div class="dcf-wacc-row dcf-wacc-total"><span class="dcf-wk">WACC = Ke×${wd.weight_equity}% + Kd×${wd.weight_debt}%</span><span class="dcf-wv wacc-final">${d.wacc_suggestion}%</span><span class="dcf-wh">Your discount rate</span></div>
+      </div>
+    </div>` : '';
+
+  // ── Growth stage rail ──
+  const impliedGTag = _impliedGrowthTagHTML(d);
+  const growthRail = `
+    <div class="dcf-growth-rail">
+      <div class="dcf-gs">
+        <div class="dcf-gs-badge stage1">Stage 1</div>
+        <div class="dcf-gs-period">Years 1 – 5</div>
+        <div class="dcf-gs-desc">Your high-confidence window — explicit year-by-year growth</div>
+        ${_dcfInp(`${tk}-dcf-g1`, 'Annual growth (%)', g1, '', '0.5', '-30', '80')}
+        ${cagrText ? `<div class="dcf-gs-cagr">Historical: ${cagrText}</div>` : ''}
+      </div>
+      <div class="dcf-growth-arrow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <span>fades</span>
+      </div>
+      <div class="dcf-gs dcf-gs-mid">
+        <div class="dcf-gs-badge stage2">Stage 2</div>
+        <div class="dcf-gs-period">Years 6 – 10</div>
+        <div class="dcf-gs-desc">Growth slows as the business matures or competition increases</div>
+        ${_dcfInp(`${tk}-dcf-g2`, 'Annual growth (%)', g2, '', '0.5', '-20', '50')}
+        <div class="dcf-gs-cagr">Should be lower than Stage 1</div>
+      </div>
+      <div class="dcf-growth-arrow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <span>converges</span>
+      </div>
+      <div class="dcf-gs dcf-gs-terminal">
+        <div class="dcf-gs-badge terminal">Terminal</div>
+        <div class="dcf-gs-period">Year 10 → ∞</div>
+        <div class="dcf-gs-desc">Perpetual steady-state rate — must be below WACC and ≤ long-run GDP</div>
+        ${_dcfInp(`${tk}-dcf-tg`, 'Terminal growth (%)', '2.5', '', '0.1', '0', '5')}
+        <div class="dcf-gs-cagr">Typically 2 – 3% (≈ nominal GDP)</div>
+      </div>
+    </div>
+    ${impliedGTag ? `<div class="dcf-growth-footer">${impliedGTag}<span class="dcf-growth-footer-note">Damodaran fundamentals-implied growth from ROIC × Reinvestment Rate — compare to your Stage 1 above.</span></div>` : ''}`;
+
+  // ── Scenarios ──
   const g1n = parseFloat(g1), g2n = parseFloat(g2);
   const waccSugg = d.wacc_suggestion || 9;
-  const bearG1   = Math.max(-5, g1n * 0.4).toFixed(1);
-  const bearG2   = Math.max(-5, g2n * 0.4).toFixed(1);
-  const bearWacc = (waccSugg + 2.0).toFixed(1);
-  const bullG1   = Math.min(60, g1n * 1.5).toFixed(1);
-  const bullG2   = Math.min(40, g2n * 1.5).toFixed(1);
-  const bullWacc = Math.max(4.0, waccSugg - 1.0).toFixed(1);
+  const bearG1 = Math.max(-5, g1n*0.4).toFixed(1), bearG2 = Math.max(-5, g2n*0.4).toFixed(1);
+  const bearWacc = (waccSugg+2.0).toFixed(1);
+  const bullG1 = Math.min(60, g1n*1.5).toFixed(1), bullG2 = Math.min(40, g2n*1.5).toFixed(1);
+  const bullWacc = Math.max(4.0, waccSugg-1.0).toFixed(1);
 
   const scenarioHTML = `
     <div class="val-scenario-section">
       <div class="val-scenario-title">
         Scenarios &amp; Probability-Weighted Fair Value
-        <span class="val-scenario-hint">Adjust Bear/Bull + probabilities (Base uses the inputs above)</span>
+        <span class="val-scenario-hint">Bear/Bull inherit your base inputs but with different growth &amp; WACC. Adjust probabilities to weight the outcome.</span>
       </div>
       <table class="val-scenario-table">
-        <thead>
-          <tr>
-            <th></th><th>g₁ %</th><th>g₂ %</th><th>Tg %</th><th>WACC %</th><th>Prob %</th><th>Fair Value</th>
-          </tr>
-        </thead>
+        <thead><tr><th></th><th>g₁ %</th><th>g₂ %</th><th>Tg %</th><th>WACC %</th><th>Prob %</th><th>Fair Value</th></tr></thead>
         <tbody>
           <tr class="scn-bear">
             <th>🐻 Bear</th>
-            <td><input type="number" id="${tk}-dcf-bear-g1"   value="${bearG1}"  step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bear-g2"   value="${bearG2}"  step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bear-tg"   value="1.5"        step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bear-wacc" value="${bearWacc}" step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bear-p"    value="25"          step="5" min="0" max="100"></td>
+            <td><input type="number" id="${tk}-dcf-bear-g1"   value="${bearG1}"   step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bear-g2"   value="${bearG2}"   step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bear-tg"   value="1.5"         step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bear-wacc" value="${bearWacc}"  step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bear-p"    value="25"           step="5" min="0" max="100"></td>
             <td class="scn-fv" id="res-${tk}-dcf-bear">—</td>
           </tr>
           <tr class="scn-base">
             <th>➡️ Base</th>
-            <td colspan="4" class="scn-base-note">Uses main inputs above</td>
-            <td><input type="number" id="${tk}-dcf-base-p"    value="50"          step="5" min="0" max="100"></td>
+            <td colspan="4" class="scn-base-note">Uses main inputs (Steps 1–4 above)</td>
+            <td><input type="number" id="${tk}-dcf-base-p"    value="50"           step="5" min="0" max="100"></td>
             <td class="scn-fv" id="res-${tk}-dcf-base">—</td>
           </tr>
           <tr class="scn-bull">
             <th>🐂 Bull</th>
-            <td><input type="number" id="${tk}-dcf-bull-g1"   value="${bullG1}"  step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bull-g2"   value="${bullG2}"  step="0.5"></td>
-            <td><input type="number" id="${tk}-dcf-bull-tg"   value="3.0"        step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bull-wacc" value="${bullWacc}" step="0.1"></td>
-            <td><input type="number" id="${tk}-dcf-bull-p"    value="25"          step="5" min="0" max="100"></td>
+            <td><input type="number" id="${tk}-dcf-bull-g1"   value="${bullG1}"   step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bull-g2"   value="${bullG2}"   step="0.5"></td>
+            <td><input type="number" id="${tk}-dcf-bull-tg"   value="3.0"         step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bull-wacc" value="${bullWacc}"  step="0.1"></td>
+            <td><input type="number" id="${tk}-dcf-bull-p"    value="25"           step="5" min="0" max="100"></td>
             <td class="scn-fv" id="res-${tk}-dcf-bull">—</td>
           </tr>
         </tbody>
@@ -1129,34 +1186,78 @@ function _dcfCardHTML(tk, d) {
     </div>`;
 
   const body = `
-    ${fcfHistory}
     <div id="mchart-${tk}-dcf" class="val-mchart"></div>
-    ${fcffNote}
-    <div class="val-inputs-grid">
-      ${_inp(`${tk}-dcf-fcf`,     'FCFF — Latest Year ($M)',  d.fcff_m ?? d.fcf_total_m, 'Free Cash Flow to Firm (OCF + after-tax interest − CapEx). Drives Enterprise Value.', '1')}
-      ${_inp(`${tk}-dcf-netdebt`, 'Net Debt ($M)',            d.net_debt_m, 'Total debt minus cash. Subtracted from EV to get equity value.', '1')}
-      ${_inp(`${tk}-dcf-shares`,  'Shares Outstanding (M)',   d.shares_m,   'Total diluted shares outstanding', '0.1', '0.001')}
-      ${_inp(`${tk}-dcf-g1`,      'Growth Yr 1–5 (%)',        g1,           'Expected annual FCFF growth, first 5 years', '0.5', '-30', '80')}
-      ${_inp(`${tk}-dcf-g2`,      'Growth Yr 6–10 (%)',       g2,           'Slower growth phase, years 6–10', '0.5', '-20', '50')}
-      ${_inp(`${tk}-dcf-tg`,      'Terminal Growth (%)',      '2.5',        'Perpetual growth after yr 10 (≈ GDP)', '0.1', '0', '5')}
-      ${_inp(`${tk}-dcf-wacc`,    'WACC (%)',                 d.wacc_suggestion, 'Weighted avg cost of capital — discounts FCFF to Enterprise Value', '0.1', '3', '30')}
-      ${_inp(`${tk}-dcf-mos`,     'Margin of Safety (%)',     '15',         'Discount applied to final equity value', '1', '0', '50')}
+
+    ${_dcfStep(1, 'Cash Flow Baseline',
+      'Review what this company has actually generated. Your FCFF input is the seed — every future year is grown from it.',
+      `${fcfTable}
+       <div class="dcf-fcf-row">
+         ${_dcfInp(`${tk}-dcf-fcf`, 'Base FCFF — Latest Full Year ($M)', d.fcff_m??d.fcf_total_m,
+           'Free Cash Flow to Firm = Operating CF + after-tax interest − CapEx. This is cash available to debt AND equity holders before financing. Use a normalised year — avoid one-offs (asset sales, legal settlements, pandemic dips).', '1')}
+         <div class="dcf-callout">
+           <div class="dcf-callout-title">Which metric to use?</div>
+           <div class="dcf-callout-body">
+             <strong>FCFF</strong> — capital-structure neutral; best for comparing across debt levels.<br>
+             <strong>Owner Earnings</strong> — FCF minus SBC; Buffett's preferred; penalises equity dilution.<br>
+             <strong>Rule of thumb:</strong> if SBC &gt; 15% of FCF, Owner Earnings gives a more conservative base.
+           </div>
+           ${oeBtn}
+         </div>
+       </div>`)}
+
+    ${_dcfStep(2, 'Growth Projections',
+      'Model three phases: a high-confidence near-term window, a fade period, and a perpetual steady state. Small changes here have large effects — always compare Stage 1 to historical CAGR.',
+      growthRail)}
+
+    ${_dcfStep(3, 'Discount Rate (WACC)',
+      'The rate that converts future cash to today\'s dollars. Higher WACC = lower fair value. Every 1 pp change in WACC typically moves the DCF result by 15–25%.',
+      `${waccBreakdown}
+       <div class="dcf-two-col">
+         ${_dcfInp(`${tk}-dcf-wacc`, 'WACC (%)', d.wacc_suggestion,
+           'Override the CAPM-derived WACC above if you believe the model mis-prices risk for this business (e.g. distressed firms, emerging markets).', '0.1', '3', '30')}
+         ${_dcfInp(`${tk}-dcf-mos`, 'Margin of Safety (%)', '15',
+           'A deliberate discount on the final equity value — your buffer against model error, optimistic inputs, and unknown unknowns. Graham used 33–50%; Buffett uses ~25%.', '1', '0', '50')}
+       </div>`)}
+
+    ${_dcfStep(4, 'Capital Structure',
+      'DCF produces Enterprise Value — the value of the whole business. Subtracting net debt gives Equity Value. Dividing by shares gives what each share is worth.',
+      `<div class="dcf-two-col">
+         ${_dcfInp(`${tk}-dcf-netdebt`, 'Net Debt ($M)', d.net_debt_m,
+           'Total financial debt minus all cash and short-term investments. Positive = net borrower (reduces equity value). Negative = net cash position (adds to equity value).', '1')}
+         ${_dcfInp(`${tk}-dcf-shares`, 'Shares Outstanding (M)', d.shares_m,
+           'Diluted shares including options, warrants, convertibles. Equity Value ÷ Shares = per-share intrinsic value.', '0.1', '0.001')}
+       </div>
+       <div class="dcf-bridge-note">
+         Enterprise Value/sh  −  Net Debt/sh  =  Equity Value/sh  ×  (1 − MoS%)  =  <strong>Fair Value</strong>
+       </div>`)}
+
+    <div class="dcf-result-strip" id="dcf-res-${tk}">
+      <div class="dcf-res-placeholder">Complete Steps 1–4 above to see the full valuation.</div>
     </div>
-    ${scenarioHTML}
+
+    ${_dcfStep(5, 'Scenarios &amp; Probability Weighting',
+      'Model three futures: a pessimistic bear case, your base case (Steps 1–4), and an optimistic bull case. Weight them by probability to get an expected fair value.',
+      scenarioHTML)}
+
     <details class="val-mc-wrap" id="mc-wrap-${tk}">
-      <summary>Monte Carlo Simulation</summary>
+      <summary>
+        <span class="dcf-mc-label">Step 6 — Monte Carlo Simulation</span>
+        <span class="dcf-mc-sub">Randomise growth &amp; WACC across 500 runs to model uncertainty as a distribution</span>
+      </summary>
       <div class="val-mc-body">
-        <div class="val-mc-note">Randomises growth &amp; WACC inputs over 500 runs to show a confidence range around the base DCF.</div>
-        <div class="val-inputs-grid" style="margin-bottom:8px;">
-          ${_inp(`${tk}-dcf-gstd`, 'Growth σ (%)', '8', 'Std-dev on Stage-1 growth (drawn from Normal distribution). Higher = wider distribution.', '0.5', '0', '30')}
-          ${_inp(`${tk}-dcf-wstd`, 'WACC σ (%)',   '1.5', 'Std-dev on WACC (drawn from Normal distribution).', '0.25', '0', '10')}
+        <div class="val-mc-note">Each run samples Stage-1 growth and WACC from a Normal distribution centred on your inputs. The histogram shows where most outcomes cluster — P50 is the median fair value.</div>
+        <div class="dcf-two-col" style="margin-bottom:8px;">
+          ${_dcfInp(`${tk}-dcf-gstd`, 'Growth uncertainty σ (%)', '8',
+            'Standard deviation on Stage-1 growth. 8% means ~68% of runs fall within ±8pp of your Stage-1 input.', '0.5', '0', '30')}
+          ${_dcfInp(`${tk}-dcf-wstd`, 'WACC uncertainty σ (%)', '1.5',
+            'Standard deviation on WACC. 1.5% means ~68% of runs fall within ±1.5pp of your WACC.', '0.25', '0', '10')}
         </div>
         <div id="mc-out-${tk}" class="val-mc-out"></div>
       </div>
     </details>`;
 
   return _cardWrap('dcf', tk, 'Discounted Cash Flow (DCF)',
-    '2-stage growth model: discount projected FCFs + terminal value back to today',
+    '4-step model: baseline FCF → growth projections → discount rate → capital structure → fair value',
     body);
 }
 
@@ -2600,24 +2701,96 @@ function _steps(arr) {
 }
 
 function _setDCFWorkings(tk, fcfPs, g1, g2, tg, wacc, mos, result, cur, netDebtPerShare, price) {
-  const el = document.getElementById(`wp-${tk}-dcf`); if (!el) return;
-  if (!result) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute — check inputs.</div>'; return; }
   const ndPs = netDebtPerShare || 0;
-  const b = _calcDCFBreakdown(fcfPs, g1, g2, tg, wacc, mos, ndPs);
+  const b    = result ? _calcDCFBreakdown(fcfPs, g1, g2, tg, wacc, mos, ndPs) : null;
+
+  // ── Live result strip (always visible inside the card) ──────────────────────
+  const resEl = document.getElementById(`dcf-res-${tk}`);
+  if (resEl) {
+    if (!b) {
+      resEl.innerHTML = `<div class="dcf-res-placeholder">Complete Steps 1–4 to see the valuation.</div>`;
+    } else {
+      const tvPct = (b.tvShare * 100).toFixed(0);
+      const tvWarnCls = b.tvShare > 0.80 ? 'dcf-tv-warn' : 'dcf-tv-ok';
+      const mosCls = result > (price||0) ? 'pos' : 'neg';
+      const updown = price > 0 ? ((result - price) / price * 100) : null;
+      const updownHTML = updown !== null
+        ? `<span class="dcf-res-ud ${updown>=0?'pos':'neg'}">${updown>=0?'▲':'▼'} ${Math.abs(updown).toFixed(1)}% vs market</span>` : '';
+
+      // Proportion bars: pv1 / pv2 / pvTV relative widths
+      const total = b.pv5 + b.pv10 + b.pvTv;
+      const w1 = total > 0 ? (b.pv5  / total * 100).toFixed(1) : 0;
+      const w2 = total > 0 ? (b.pv10 / total * 100).toFixed(1) : 0;
+      const wT = total > 0 ? (b.pvTv / total * 100).toFixed(1) : 0;
+
+      resEl.innerHTML = `
+        <div class="dcf-res-header">
+          <span class="dcf-res-label">Valuation Result</span>
+          ${updownHTML}
+        </div>
+
+        <div class="dcf-res-ev-bar-wrap">
+          <div class="dcf-res-ev-bar-label">Enterprise Value breakdown</div>
+          <div class="dcf-res-ev-bar">
+            <div class="dcf-ev-seg s1" style="width:${w1}%" title="PV Stage 1: ${_fp(b.pv5,cur)}">
+              <span>S1 ${w1}%</span>
+            </div>
+            <div class="dcf-ev-seg s2" style="width:${w2}%" title="PV Stage 2: ${_fp(b.pv10,cur)}">
+              <span>S2 ${w2}%</span>
+            </div>
+            <div class="dcf-ev-seg tv ${tvWarnCls}" style="width:${wT}%" title="PV Terminal: ${_fp(b.pvTv,cur)}">
+              <span>TV ${wT}%</span>
+            </div>
+          </div>
+          <div class="dcf-res-ev-legend">
+            <span>PV Stage 1 (yr 1–5): <strong>${_fp(b.pv5, cur)}</strong></span>
+            <span>PV Stage 2 (yr 6–10): <strong>${_fp(b.pv10, cur)}</strong></span>
+            <span class="${tvWarnCls === 'dcf-tv-warn' ? 'dcf-tv-warn-text' : ''}">PV Terminal: <strong>${_fp(b.pvTv, cur)}</strong> (${tvPct}% of EV${b.tvShare > 0.80 ? ' ⚠ high' : ''})</span>
+          </div>
+        </div>
+
+        <div class="dcf-res-chain">
+          <div class="dcf-res-row">
+            <span class="dcf-rc-lbl">Enterprise Value / share</span>
+            <span class="dcf-rc-eq">PV(S1) + PV(S2) + PV(TV)</span>
+            <span class="dcf-rc-val">${_fp(b.ev, cur)}</span>
+          </div>
+          <div class="dcf-res-row dcf-rc-sub">
+            <span class="dcf-rc-lbl">− Net Debt / share</span>
+            <span class="dcf-rc-eq">${_fp(ndPs, cur)}</span>
+            <span class="dcf-rc-val">${_fp(b.equityPs, cur)}</span>
+          </div>
+          <div class="dcf-res-row dcf-rc-sub">
+            <span class="dcf-rc-lbl">× (1 − ${(mos*100).toFixed(0)}% MoS)</span>
+            <span class="dcf-rc-eq">Margin of safety buffer</span>
+            <span class="dcf-rc-val"></span>
+          </div>
+          <div class="dcf-res-row dcf-rc-final">
+            <span class="dcf-rc-lbl">Fair Value / share</span>
+            <span class="dcf-rc-eq"></span>
+            <span class="dcf-rc-val ${mosCls}">${_fp(result, cur)}</span>
+          </div>
+        </div>`;
+    }
+  }
+
+  // ── Workings popup panel (detailed steps + sensitivity grid) ─────────────────
+  const el = document.getElementById(`wp-${tk}-dcf`); if (!el) return;
   if (!b) { el.innerHTML = '<div style="color:var(--muted)">Cannot compute — check inputs.</div>'; return; }
+
   const tvPct = (b.tvShare * 100);
   const tvWarn = tvPct > 80
-    ? `<span class="val-warn-inline">⚠ ${tvPct.toFixed(0)}% of value from Terminal → priced for perfection</span>`
+    ? `<span class="val-warn-inline">⚠ ${tvPct.toFixed(0)}% of value from Terminal → very sensitive to WACC &amp; Tg</span>`
     : `<span style="color:var(--muted)">${tvPct.toFixed(0)}% of EV comes from Terminal Value</span>`;
 
   const stepsHTML = _steps([
     ['1', `Base FCFF/share = ${_fp(fcfPs, cur)}`, 'Free Cash Flow to Firm per share — before debt service'],
-    ['2', `Year 1–5 FCFFs: ${b.yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}% / yr → PV sum = ${_fp(b.pv5, cur)}`],
-    ['3', `Year 6–10 FCFFs: ${b.yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}% / yr → PV sum = ${_fp(b.pv10, cur)}`],
-    ['4', `Terminal Value (yr 10) = ${_fp(b.cf10,cur)} × (1+${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}%−${(tg*100).toFixed(1)}%) = ${_fp(b.tv, cur)}`, `PV(TV) = ${_fp(b.pvTv, cur)} · ${tvWarn}`],
-    ['5', `Enterprise Value / share = ${_fp(b.pv5,cur)} + ${_fp(b.pv10,cur)} + ${_fp(b.pvTv,cur)} = ${_fp(b.ev, cur)}`, 'Sum of discounted FCFFs + terminal value'],
-    ['6', `Equity Value / share = EV − Net Debt/share = ${_fp(b.ev,cur)} − ${_fp(ndPs,cur)} = ${_fp(b.equityPs, cur)}`, 'EV → Equity bridge'],
-    ['7', `After ${(mos*100).toFixed(0)}% margin of safety: ${_fp(b.equityPs,cur)} × ${(1-mos).toFixed(2)} = ${_fp(b.fairValue, cur)}`, 'Final DCF fair value'],
+    ['2', `Year 1–5 FCFFs: ${b.yr5.map(v=>_fp(v,cur)).join(', ')}`, `Growing at ${(g1*100).toFixed(1)}%/yr → PV sum = ${_fp(b.pv5, cur)}`],
+    ['3', `Year 6–10 FCFFs: ${b.yr10.map(v=>_fp(v,cur)).join(', ')}`, `Slowing to ${(g2*100).toFixed(1)}%/yr → PV sum = ${_fp(b.pv10, cur)}`],
+    ['4', `Terminal Value (yr 10) = ${_fp(b.cf10,cur)} × (1+${(tg*100).toFixed(1)}%) ÷ (${(wacc*100).toFixed(1)}%−${(tg*100).toFixed(1)}%) = ${_fp(b.tv,cur)}`, `PV(TV) = ${_fp(b.pvTv,cur)} · ${tvWarn}`],
+    ['5', `Enterprise Value/share = ${_fp(b.pv5,cur)} + ${_fp(b.pv10,cur)} + ${_fp(b.pvTv,cur)} = ${_fp(b.ev,cur)}`, 'Sum of all discounted cash flows + terminal value'],
+    ['6', `Equity Value/share = EV − Net Debt/share = ${_fp(b.ev,cur)} − ${_fp(ndPs,cur)} = ${_fp(b.equityPs,cur)}`, 'EV → Equity bridge: subtract what debtholders are owed'],
+    ['7', `After ${(mos*100).toFixed(0)}% MoS: ${_fp(b.equityPs,cur)} × ${(1-mos).toFixed(2)} = ${_fp(b.fairValue,cur)}`, 'Final DCF fair value with safety discount applied'],
   ]);
 
   // 5×5 sensitivity grid: WACC rows × Terminal-g cols → fair value
