@@ -379,6 +379,7 @@ function _renderStockPanel(ticker, d) {
         <span>Generating AI business analysis...</span>
       </div>
     </div>
+    ${_consensusCardHTML(ticker, d)}
     <div class="val-compare-card">
       <div class="chart-header" style="margin-bottom:6px;">
         <div class="chart-title" style="margin:0;font-size:12px;">Intrinsic Value vs Market Price</div>
@@ -675,6 +676,17 @@ function _categoriesHTML(tk, d) {
     <div class="val-methods-grid">
       ${_grahamCardHTML(tk, d)}
       ${_ncavCardHTML(tk, d)}
+    </div>
+  </div>
+
+  <!-- CATEGORY 5: Quality Signals -->
+  <div class="val-category">
+    <div class="val-category-title">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      Quality Signals
+    </div>
+    <div class="val-methods-grid">
+      ${_qualityCardHTML(tk, d)}
     </div>
   </div>`;
 }
@@ -1015,6 +1027,7 @@ function _dcfCardHTML(tk, d) {
   const fcffNote = `<div class="val-note" style="margin-bottom:4px;">
     Model: FCFF discounted at WACC → Enterprise Value → subtract Net Debt → Equity Value ÷ Shares.
     ${oeBtn}
+    ${_impliedGrowthTagHTML(d)}
   </div>`;
 
   // Bear / Bull defaults (Base is tied to the main inputs above)
@@ -1150,7 +1163,8 @@ function _epvCardHTML(tk, d) {
         <div class="val-epv-trio-value" id="epv-trio-moat-${tk}">—</div>
         <div class="val-epv-trio-hint" id="epv-trio-moat-hint-${tk}">(EPV − Asset) / EPV</div>
       </div>
-    </div>`;
+    </div>
+    ${_economicProfitHTML(tk, d)}`;
   return _cardWrap('epv', tk, 'Earnings Power Value (EPV)',
     'Greenwald 3-number model: EPV (no growth) vs Asset Reproduction Value — gap = economic moat',
     body);
@@ -1403,6 +1417,95 @@ function _evEbitCardHTML(tk, d) {
     body);
 }
 
+// ── D1: Economic Profit panel (EPV card) ─────────────────────────────────────
+function _economicProfitHTML(tk, d) {
+  const hist = d.roic_history || [];
+  if (!hist.length) return '';
+  const roicTTM = d.roic_ttm_pct;
+  const roic5   = d.roic_5yr_avg_pct;
+  const wacc    = d.wacc_suggestion;
+  const spread  = d.roic_wacc_spread_pct;
+  const ic_m    = d.invested_capital_m || 0;
+  const ep_m    = d.economic_profit_m;
+
+  // Normalise ROIC bar heights (max 40% ROIC = full bar, neg clipped to 0)
+  const bars = hist.map(r => {
+    const h = Math.max(1, Math.min(100, (r.roic_pct / 40) * 100));
+    const cls = r.roic_pct >= (wacc || 0) ? 'ep-bar-above' : 'ep-bar-below';
+    return `<div class="val-ep-bar ${cls}" style="height:${h.toFixed(1)}%"
+                 title="${r.year}: ROIC ${r.roic_pct}%"></div>`;
+  }).join('');
+
+  const verdict = spread === null || spread === undefined ? '—'
+                : spread > 5  ? 'Wealth creator — ROIC materially above cost of capital'
+                : spread > 0  ? 'Modest value creator'
+                : spread > -3 ? 'Breakeven on capital'
+                :               'Value destroyer — earns less than cost of capital';
+  const verdictCls = spread === null || spread === undefined ? ''
+                   : spread > 5 ? 'pos' : spread > 0 ? 'neutral' : 'neg';
+
+  const fmtM = (v) => v === null || v === undefined ? '—'
+                    : Math.abs(v) >= 1000 ? `$${(v/1000).toFixed(2)}B`
+                    : `$${v.toFixed(0)}M`;
+
+  return `
+    <details class="val-ep-wrap">
+      <summary>Economic Profit · ROIC vs WACC</summary>
+      <div class="val-ep-body">
+        <div class="val-ep-numbers">
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">ROIC (TTM)</div>
+            <div class="val-ep-stat-val">${roicTTM === null || roicTTM === undefined ? '—' : roicTTM.toFixed(1) + '%'}</div>
+          </div>
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">ROIC (5yr avg)</div>
+            <div class="val-ep-stat-val">${roic5 === null || roic5 === undefined ? '—' : roic5.toFixed(1) + '%'}</div>
+          </div>
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">WACC</div>
+            <div class="val-ep-stat-val">${wacc ? wacc.toFixed(1) + '%' : '—'}</div>
+          </div>
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">Spread (ROIC − WACC)</div>
+            <div class="val-ep-stat-val ${verdictCls}">${spread === null || spread === undefined ? '—' : (spread >= 0 ? '+' : '') + spread.toFixed(1) + ' pp'}</div>
+          </div>
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">Invested Capital</div>
+            <div class="val-ep-stat-val">${fmtM(ic_m)}</div>
+          </div>
+          <div class="val-ep-stat">
+            <div class="val-ep-stat-lbl">Economic Profit</div>
+            <div class="val-ep-stat-val ${verdictCls}">${fmtM(ep_m)}</div>
+          </div>
+        </div>
+        <div class="val-ep-chart" title="ROIC per year (bar height = ROIC, green = above WACC)">
+          <div class="val-ep-chart-bars">${bars}</div>
+          <div class="val-ep-chart-wacc" style="bottom:${Math.max(1, Math.min(100, ((wacc || 0) / 40) * 100)).toFixed(1)}%"></div>
+          <div class="val-ep-chart-years">
+            ${hist.map(r => `<span>${r.year}</span>`).join('')}
+          </div>
+        </div>
+        <div class="val-ep-verdict ${verdictCls}">${verdict}</div>
+      </div>
+    </details>`;
+}
+
+// ── D2: Fundamentals-implied growth tag (DCF card) ───────────────────────────
+function _impliedGrowthTagHTML(d) {
+  const g = d.implied_growth_fundamentals_pct;
+  const r = d.reinvestment_rate_pct;
+  const roic = d.roic_ttm_pct;
+  if (g === null || g === undefined || roic === null || roic === undefined) return '';
+  const tip = `Fundamentals-implied growth (Damodaran): g = ROIC × Reinvestment Rate\n` +
+              `• ROIC TTM: ${roic.toFixed(1)}%\n` +
+              `• Reinvestment rate: ${r === null || r === undefined ? 'N/A' : r.toFixed(1) + '%'}\n` +
+              `• → Implied g: ${g.toFixed(1)}%\n\n` +
+              `If your DCF Stage-1 growth input is far above this number, the model ` +
+              `assumes the company will accelerate reinvestment or improve ROIC — verify.`;
+  const color = g >= 15 ? 'green' : g >= 5 ? 'gold' : 'violet';
+  return _tagHTML('Implied g (fund.)', `${g.toFixed(1)}%`, tip, color);
+}
+
 // ── C3: EV waterfall bridge HTML (shared by EV/EBITDA + EV/EBIT) ─────────────
 function _evBridgeHTML(tk, modelId, d) {
   const b = d.ev_bridge;
@@ -1490,6 +1593,228 @@ function _grahamCardHTML(tk, d) {
   return _cardWrap('graham', tk, 'Graham Number',
     'Benjamin Graham conservative fair value: √(22.5 × EPS × BVPS)',
     body);
+}
+
+// 11. Earnings Quality ─────────────────────────────────────────────────────────
+// Informational (no inputs, no fair value). Combines D3 metrics.
+function _qualityCardHTML(tk, d) {
+  const cc  = d.cash_conversion_pct;
+  const ac  = d.accruals_ratio_pct;
+  const sd  = d.sbc_drag_pct;
+
+  // Score each signal 0-100
+  const _scoreCC = (v) => {
+    if (v === null || v === undefined) return null;
+    if (v >= 100) return 100;
+    if (v >= 80)  return 85;
+    if (v >= 60)  return 65;
+    if (v >= 40)  return 40;
+    return 20;
+  };
+  const _scoreAC = (v) => {
+    if (v === null || v === undefined) return null;
+    // Lower |accruals| is better. >5% is a red flag
+    const a = Math.abs(v);
+    if (a < 1) return 95;
+    if (a < 3) return 75;
+    if (a < 5) return 55;
+    if (a < 8) return 35;
+    return 15;
+  };
+  const _scoreSD = (v) => {
+    if (v === null || v === undefined) return 90;    // no SBC reported → assume low
+    if (v < 5)  return 95;
+    if (v < 15) return 75;
+    if (v < 30) return 55;
+    if (v < 50) return 30;
+    return 10;
+  };
+  const parts = {
+    cash_conv: _scoreCC(cc),
+    accruals:  _scoreAC(ac),
+    sbc_drag:  _scoreSD(sd),
+  };
+  const valid = Object.values(parts).filter(v => v !== null);
+  const score = valid.length ? Math.round(valid.reduce((a,b)=>a+b,0) / valid.length) : null;
+  const band  = score === null ? 'fair' :
+                score >= 80 ? 'excellent' :
+                score >= 60 ? 'good' :
+                score >= 40 ? 'fair'  : 'weak';
+  const bandLabel = {excellent:'Clean', good:'Solid', fair:'Mixed', weak:'Suspect'}[band];
+
+  const row = (label, val, fmt, score_, hint) => {
+    const v = val === null || val === undefined ? '—' : fmt(val);
+    const dot = score_ === null ? '' :
+                score_ >= 80 ? '<span class="qc-dot good"></span>' :
+                score_ >= 60 ? '<span class="qc-dot ok"></span>' :
+                score_ >= 40 ? '<span class="qc-dot mid"></span>' :
+                               '<span class="qc-dot bad"></span>';
+    return `<tr>
+      <td class="qc-lbl">${dot}${label}</td>
+      <td class="qc-val">${v}</td>
+      <td class="qc-hint">${hint}</td>
+    </tr>`;
+  };
+
+  const body = `
+    <div class="val-quality-top">
+      <div class="val-quality-score ${band}">
+        <div class="val-quality-score-num">${score !== null ? score : '—'}</div>
+        <div class="val-quality-score-lbl">${bandLabel}</div>
+      </div>
+      <div class="val-quality-tagline">
+        Cross-check whether reported earnings convert to cash, whether accruals are reasonable,
+        and whether stock-based comp is diluting the owner.
+      </div>
+    </div>
+    <table class="val-quality-table">
+      <thead><tr><th>Signal</th><th>Value</th><th>Healthy range</th></tr></thead>
+      <tbody>
+        ${row('Cash conversion (5yr)',  cc, v => v.toFixed(0)+'%', parts.cash_conv,
+              '≥ 80% — FCF tracks NI')}
+        ${row('Accruals ratio (TTM)',   ac, v => (v >= 0 ? '+' : '') + v.toFixed(2)+'%', parts.accruals,
+              '|x| &lt; 3% — earnings backed by cash')}
+        ${row('SBC drag (5yr)',         sd, v => v.toFixed(0)+'%', parts.sbc_drag,
+              '&lt; 15% of FCF — SBC not eating return')}
+      </tbody>
+    </table>
+    <div class="val-quality-note">
+      Heuristic: high cash conversion + low accruals + low SBC drag = earnings you can trust.
+      Low scores here don't mean "sell", but they warrant reading the MD&A.
+    </div>`;
+  return _cardWrap('qual', tk, 'Earnings Quality',
+    'Does the cash back up the net income? Accruals, cash conversion, SBC drag.',
+    body);
+}
+
+// ── D4: Consensus fair value card (static shell — filled by _renderConsensus) ──
+
+function _consensusCardHTML(tk, d) {
+  return `
+  <div class="val-consensus-card" id="con-${tk}">
+    <div class="val-consensus-header">
+      <div class="val-consensus-title">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Consensus Fair Value
+      </div>
+      <div class="val-consensus-meta" id="con-${tk}-meta">Run a model to see consensus</div>
+    </div>
+    <div class="val-consensus-body">
+      <div class="val-consensus-main">
+        <div class="val-consensus-fv" id="con-${tk}-fv">—</div>
+        <div class="val-consensus-mos-row">
+          <span class="val-consensus-mos-lbl">Margin of Safety</span>
+          <span class="val-consensus-mos-val" id="con-${tk}-mos">—</span>
+        </div>
+        <div class="val-consensus-gauge-wrap">
+          <div class="val-consensus-gauge" id="con-${tk}-gauge">
+            <div class="val-consensus-gauge-fill" id="con-${tk}-gauge-fill" style="width:0%"></div>
+            <div class="val-consensus-gauge-marker" id="con-${tk}-gauge-mk" style="left:50%"></div>
+          </div>
+          <div class="val-consensus-gauge-labels">
+            <span>Deep Value</span><span>Fair</span><span>Expensive</span>
+          </div>
+        </div>
+        <div class="val-consensus-verdict" id="con-${tk}-verdict"></div>
+      </div>
+      <div class="val-consensus-breakdown" id="con-${tk}-breakdown"></div>
+    </div>
+  </div>`;
+}
+
+// ── D4: _renderConsensus — fills the consensus card after every recalc ────────
+
+function _renderConsensus(tk, results, price, cur) {
+  // Models that produce a fair-value price estimate (exclude rdcf / qual which are informational)
+  const MODEL_LABELS = {
+    dcf:    'DCF',
+    epv:    'EPV',
+    ddm:    'DDM',
+    pe:     'P/E',
+    evda:   'EV/EBITDA',
+    eveb:   'EV/EBIT',
+    ps:     'P/S',
+    peg:    'PEG',
+    graham: 'Graham',
+    ncav:   'NCAV',
+  };
+
+  // Collect active (non-null, positive) estimates
+  const entries = Object.entries(MODEL_LABELS)
+    .map(([id, label]) => {
+      const v = results[id];
+      return (v !== null && v !== undefined && v > 0) ? { id, label, fv: v } : null;
+    })
+    .filter(Boolean);
+
+  const fvEl      = document.getElementById(`con-${tk}-fv`);
+  const mosEl     = document.getElementById(`con-${tk}-mos`);
+  const metaEl    = document.getElementById(`con-${tk}-meta`);
+  const verdictEl = document.getElementById(`con-${tk}-verdict`);
+  const fillEl    = document.getElementById(`con-${tk}-gauge-fill`);
+  const mkEl      = document.getElementById(`con-${tk}-gauge-mk`);
+  const bdEl      = document.getElementById(`con-${tk}-breakdown`);
+  if (!fvEl) return;
+
+  if (entries.length === 0) {
+    fvEl.textContent      = '—';
+    mosEl.textContent     = '—';
+    metaEl.textContent    = 'Run a model to see consensus';
+    verdictEl.textContent = '';
+    verdictEl.className   = 'val-consensus-verdict';
+    if (fillEl) fillEl.style.width  = '0%';
+    if (mkEl)   mkEl.style.left    = '50%';
+    if (bdEl)   bdEl.innerHTML     = '';
+    return;
+  }
+
+  // Median fair value
+  const sorted = [...entries].sort((a, b) => a.fv - b.fv);
+  const mid    = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? (sorted[mid - 1].fv + sorted[mid].fv) / 2
+    : sorted[mid].fv;
+
+  // Margin of safety = (median − price) / median × 100
+  const mos = price > 0 ? ((median - price) / median) * 100 : null;
+
+  // Verdict bands
+  let vLabel, vCls;
+  if (mos === null)    { vLabel = '—';            vCls = ''; }
+  else if (mos >= 30)  { vLabel = '★ Strong Buy'; vCls = 'strong-buy'; }
+  else if (mos >= 10)  { vLabel = '▲ Buy';        vCls = 'buy'; }
+  else if (mos >= -10) { vLabel = '◆ Hold';        vCls = 'hold'; }
+  else if (mos >= -30) { vLabel = '▼ Sell';        vCls = 'sell'; }
+  else                 { vLabel = '✕ Strong Sell'; vCls = 'strong-sell'; }
+
+  // Gauge: map MoS [-60, +60] → [0, 100%]; 50% = fair value
+  const gaugePos  = mos === null ? 50 : Math.max(0, Math.min(100, ((mos + 60) / 120) * 100));
+  const fillWidth = mos === null ? 0 : Math.max(0, Math.min(100, gaugePos));
+
+  // Update DOM
+  fvEl.textContent   = _fp(median, cur);
+  mosEl.textContent  = mos === null ? '—' : (mos >= 0 ? '+' : '') + mos.toFixed(1) + '%';
+  mosEl.className    = `val-consensus-mos-val ${mos === null ? '' : mos >= 0 ? 'pos' : 'neg'}`;
+  metaEl.textContent = `Median of ${entries.length} model${entries.length > 1 ? 's' : ''} · ${_fp(price, cur)} market`;
+  verdictEl.textContent = vLabel;
+  verdictEl.className   = `val-consensus-verdict ${vCls}`;
+  if (fillEl) fillEl.style.width = `${fillWidth}%`;
+  if (mkEl)   mkEl.style.left   = `${gaugePos}%`;
+
+  // Breakdown rows — all models sorted by estimate desc
+  if (bdEl) {
+    const rows = [...entries].sort((a, b) => b.fv - a.fv).map(e => {
+      const delta = price > 0 ? ((e.fv - price) / price) * 100 : null;
+      const cls   = delta === null ? '' : delta >= 0 ? 'pos' : 'neg';
+      const sign  = delta === null ? '' : delta >= 0 ? '+' : '';
+      return `<div class="val-con-row">
+        <span class="val-con-lbl">${e.label}</span>
+        <span class="val-con-fv">${_fp(e.fv, cur)}</span>
+        <span class="val-con-delta ${cls}">${delta === null ? '' : sign + delta.toFixed(0) + '%'}</span>
+      </div>`;
+    }).join('');
+    bdEl.innerHTML = rows;
+  }
 }
 
 // 10. NCAV ─────────────────────────────────────────────────────────────────────
@@ -1720,6 +2045,15 @@ function _recalcTicker(tk) {
   _setResult(`res-${tk}-ncav`, results.ncav, cur);
   _setUD(`ud-${tk}-ncav`, results.ncav, price);
   _setNCAVWorkings(tk, ncavCa, ncavTl, ncavShares, results.ncav, cur);
+
+  // Earnings Quality — informational, no fair value. Blank the result slot.
+  const qualEl = document.getElementById(`res-${tk}-qual`);
+  if (qualEl) { qualEl.textContent = ''; qualEl.style.display = 'none'; }
+  const qualUD = document.getElementById(`ud-${tk}-qual`);
+  if (qualUD) qualUD.style.display = 'none';
+
+  // D4: Consensus fair value summary
+  _renderConsensus(tk, results, price, cur);
 
   // Comparison chart
   _renderCompareChart(tk, results, price, cur);

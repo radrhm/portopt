@@ -1286,3 +1286,355 @@
   margin-top: 2px;
   font-style: italic;
 }
+
+/* ── TIER D: Economic Profit / ROIC ────────────────────────────────────────── */
+
+.val-ep-wrap {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.val-ep-wrap > summary {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  list-style: none;
+  background: rgba(10,16,32,.4);
+  user-select: none;
+}
+.val-ep-wrap > summary::-webkit-details-marker { display: none; }
+.val-ep-wrap[open] > summary { color: var(--fg); border-bottom: 1px solid var(--border); }
+.val-ep-body {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 10px;
+}
+.val-ep-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.val-ep-stat {
+  background: rgba(10,16,32,.5);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-width: 90px;
+}
+.val-ep-stat-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.val-ep-stat-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-top: 2px;
+}
+.val-ep-stat-val.pos { color: #6ee7b7; }
+.val-ep-stat-val.neg { color: #f87171; }
+.val-ep-stat-val.neutral { color: #fbbf24; }
+
+/* ROIC bar chart */
+.val-ep-chart {
+  position: relative;
+  width: 120px;
+  height: 72px;
+  grid-row: 1 / 3;
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+}
+.val-ep-chart-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding-bottom: 4px;
+  position: relative;
+}
+.val-ep-bar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  min-height: 3px;
+  transition: height .2s;
+}
+.ep-bar-above { background: #6ee7b7; }
+.ep-bar-below { background: #f87171; }
+.val-ep-chart-wacc {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(251,191,36,.7);
+  pointer-events: none;
+}
+.val-ep-chart-years {
+  display: flex;
+  justify-content: space-around;
+  font-size: 8px;
+  color: var(--muted);
+}
+.val-ep-chart-years span { flex: 1; text-align: center; }
+
+.val-ep-verdict {
+  grid-column: 1 / 3;
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.val-ep-verdict.pos { color: #6ee7b7; }
+.val-ep-verdict.neg { color: #f87171; }
+.val-ep-verdict.neutral { color: #fbbf24; }
+
+/* ── TIER D: Earnings Quality card ─────────────────────────────────────────── */
+
+.val-quality-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.val-quality-score {
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+}
+.val-quality-score.excellent { border-color: #6ee7b7; background: rgba(110,231,183,.08); }
+.val-quality-score.good      { border-color: #86efac; background: rgba(134,239,172,.08); }
+.val-quality-score.fair      { border-color: #fbbf24; background: rgba(251,191,36,.08); }
+.val-quality-score.weak      { border-color: #f87171; background: rgba(248,113,113,.08); }
+.val-quality-score-num {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--fg);
+}
+.val-quality-score-lbl {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-top: 2px;
+}
+.val-quality-tagline {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.val-quality-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.val-quality-table th {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.val-quality-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+}
+.qc-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.qc-dot.good { background: #6ee7b7; }
+.qc-dot.ok   { background: #86efac; }
+.qc-dot.mid  { background: #fbbf24; }
+.qc-dot.bad  { background: #f87171; }
+.qc-lbl { color: var(--fg); font-weight: 500; }
+.qc-val { font-weight: 700; color: var(--fg); text-align: right; white-space: nowrap; }
+.qc-hint { color: var(--muted); font-style: italic; font-size: 10px; padding-left: 8px; }
+.val-quality-note {
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.5;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── TIER D: Consensus Fair Value card ─────────────────────────────────────── */
+
+.val-consensus-card {
+  background: linear-gradient(135deg, rgba(99,102,241,.06) 0%, rgba(16,24,48,.8) 100%);
+  border: 1px solid rgba(99,102,241,.25);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.val-consensus-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.val-consensus-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.val-consensus-title svg { opacity: .6; }
+.val-consensus-meta {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.val-consensus-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 520px) {
+  .val-consensus-body { grid-template-columns: 1fr; }
+}
+
+/* Left: big fair value + MoS + gauge + verdict */
+.val-consensus-main {}
+.val-consensus-fv {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--fg);
+  letter-spacing: -.5px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.val-consensus-mos-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.val-consensus-mos-lbl {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.val-consensus-mos-val {
+  font-size: 13px;
+  font-weight: 700;
+}
+.val-consensus-mos-val.pos { color: #6ee7b7; }
+.val-consensus-mos-val.neg { color: #f87171; }
+
+.val-consensus-gauge-wrap { margin-bottom: 8px; }
+.val-consensus-gauge {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #6ee7b7 0%, #fbbf24 50%, #f87171 100%);
+  overflow: visible;
+}
+.val-consensus-gauge-fill { display: none; } /* unused; gradient is always full */
+.val-consensus-gauge-marker {
+  position: absolute;
+  top: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: 2px solid var(--bg);
+  transform: translateX(-50%);
+  transition: left .4s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+.val-consensus-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.val-consensus-verdict {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  margin-top: 4px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+}
+.val-consensus-verdict.strong-buy  { background: rgba(110,231,183,.15); border-color:#6ee7b7; color:#6ee7b7; }
+.val-consensus-verdict.buy         { background: rgba(134,239,172,.10); border-color:#86efac; color:#86efac; }
+.val-consensus-verdict.hold        { background: rgba(251,191,36,.10);  border-color:#fbbf24; color:#fbbf24; }
+.val-consensus-verdict.sell        { background: rgba(248,113,113,.10); border-color:#f87171; color:#f87171; }
+.val-consensus-verdict.strong-sell { background: rgba(239, 68, 68,.15); border-color:#ef4444; color:#ef4444; }
+
+/* Right: per-model breakdown */
+.val-consensus-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-self: center;
+}
+.val-con-row {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.val-con-row:last-child { border-bottom: none; }
+.val-con-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.val-con-fv {
+  font-weight: 700;
+  color: var(--fg);
+  text-align: right;
+}
+.val-con-delta {
+  font-size: 10px;
+  font-weight: 600;
+  width: 44px;
+  text-align: right;
+}
+.val-con-delta.pos { color: #6ee7b7; }
+.val-con-delta.neg { color: #f87171; }

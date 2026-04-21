@@ -655,6 +655,125 @@ def fetch_financials(ticker: str) -> dict:
         "ev_total_m":      ev_bridge_m,
     }
 
+    # ── D1: ROIC history + Economic Profit ─────────────────────────
+    # ROIC(yr) = NOPAT(yr) / Invested Capital(yr)
+    # Invested Capital ≈ Shareholders' Equity + Total Debt − Cash
+    roic_history = []
+    invested_capital_m = 0.0
+    try:
+        bs_full = t.balance_sheet
+        if bs_full is not None and not bs_full.empty:
+            bs_by_yr = {}
+            for col in bs_full.columns:
+                try:
+                    yr_b = col.year
+                except Exception:
+                    continue
+                eq_v = _get_label(bs_full, ("Stockholders Equity", "Total Equity Gross Minority Interest",
+                                             "Common Stock Equity"), col)
+                td_v = _get_label(bs_full, ("Total Debt", "Long Term Debt And Capital Lease Obligation",
+                                             "Long Term Debt"), col)
+                cash_v = _get_label(bs_full, ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments",
+                                               "Cash"), col)
+                bs_by_yr[yr_b] = (eq_v or 0.0, td_v or 0.0, cash_v or 0.0)
+
+            ebit_by_yr = {r['year']: r['ebit_m'] for r in ebit_annual if r.get('ebit_m') is not None}
+            for yr_r in sorted(bs_by_yr.keys()):
+                eq_v, td_v, cash_v = bs_by_yr[yr_r]
+                ic_m = (eq_v + td_v - cash_v) / 1e6
+                eb   = ebit_by_yr.get(yr_r)
+                if ic_m <= 0 or eb is None:
+                    continue
+                nopat_m = eb * (1.0 - tax_rate)
+                roic_pct = (nopat_m / ic_m) * 100
+                # Sanity clip
+                if -100 <= roic_pct <= 200:
+                    roic_history.append({
+                        "year":     yr_r,
+                        "roic_pct": round(roic_pct, 1),
+                        "ic_m":     round(ic_m,     1),
+                        "nopat_m":  round(nopat_m,  1),
+                    })
+        if roic_history:
+            invested_capital_m = roic_history[-1]["ic_m"]
+    except Exception as e:
+        logger.warning("Could not compute ROIC history: %s", e)
+
+    roic_ttm_pct     = roic_history[-1]["roic_pct"] if roic_history else None
+    roic_5yr_avg_pct = None
+    if roic_history:
+        last5 = roic_history[-5:]
+        roic_5yr_avg_pct = round(sum(r["roic_pct"] for r in last5) / len(last5), 1)
+
+    # Economic Profit ≈ (ROIC − WACC) × Invested Capital  [$M]
+    economic_profit_m   = None
+    roic_wacc_spread_pct = None
+    if roic_ttm_pct is not None and invested_capital_m > 0 and wacc:
+        roic_wacc_spread_pct = round(roic_ttm_pct - wacc, 2)
+        economic_profit_m    = round((roic_wacc_spread_pct / 100.0) * invested_capital_m, 1)
+
+    # ── D2: Reinvestment rate + fundamentals-implied growth ────────
+    # Reinvestment = (Capex − D&A) / NOPAT  → net capital that funds growth
+    # Implied g = ROIC × Reinvestment  (Damodaran fundamentals-driven growth)
+    reinvestment_rate_pct          = None
+    implied_growth_fundamentals_pct = None
+    try:
+        if historical_fcf and ebit_m and ebit_m != 0:
+            latest = historical_fcf[0]
+            capex_abs_m = abs(latest.get("capex_m") or 0)       # stored negative
+            dna_m       = latest.get("dna_m") or 0
+            net_invest_m = capex_abs_m - dna_m                   # growth capex
+            nopat_m      = ebit_m * (1.0 - tax_rate)
+            if nopat_m > 0:
+                reinvest_frac = max(0.0, net_invest_m) / nopat_m
+                reinvestment_rate_pct = round(reinvest_frac * 100, 1)
+                if roic_ttm_pct is not None:
+                    implied_growth_fundamentals_pct = round(
+                        roic_ttm_pct * reinvest_frac, 1
+                    )
+    except Exception:
+        pass
+
+    # ── D3: Earnings quality ───────────────────────────────────────
+    # Cash conversion  = Σ5yr FCF / Σ5yr Net Income
+    # Accruals ratio   = (NI − CFO) / Total Assets  (TTM)
+    # SBC drag         = Σ5yr SBC / Σ5yr FCF
+    # WC change        = ΔCurrent Assets − ΔCurrent Liabilities (most recent)
+    cash_conversion_pct  = None
+    accruals_ratio_pct   = None
+    sbc_drag_pct         = None
+    working_cap_change_m = None
+    try:
+        # Σ5yr FCF and SBC
+        last5_fcf = [r for r in historical_fcf[:5]]
+        fcf_sum   = sum(r.get("fcf_m") or 0 for r in last5_fcf)
+        sbc_sum   = sum(r.get("sbc_m") or 0 for r in last5_fcf)
+
+        # Σ5yr Net Income from eps_history (oldest→newest, take last 5)
+        ni_sum = 0.0
+        for r in (eps_history[-5:] if len(eps_history) >= 5 else eps_history):
+            if r.get("eps") is not None and shares:
+                ni_sum += (r["eps"] * shares) / 1e6
+
+        if ni_sum > 0 and fcf_sum > 0:
+            cash_conversion_pct = round((fcf_sum / ni_sum) * 100, 1)
+        if fcf_sum > 0 and sbc_sum > 0:
+            sbc_drag_pct = round((sbc_sum / fcf_sum) * 100, 1)
+
+        # Accruals ratio (most recent year)
+        if historical_fcf and total_assets_m > 0:
+            latest   = historical_fcf[0]
+            cfo_ttm_m = latest.get("op_cf_m") or 0
+            ni_ttm_m  = None
+            if eps_history:
+                last_eps = eps_history[-1]
+                if last_eps.get("eps") is not None and shares:
+                    ni_ttm_m = (last_eps["eps"] * shares) / 1e6
+            if ni_ttm_m is not None:
+                accruals_ratio_pct = round(((ni_ttm_m - cfo_ttm_m) / total_assets_m) * 100, 2)
+    except Exception as e:
+        logger.warning("Could not compute earnings quality: %s", e)
+
     # ── Composite "Ultimate" quality score (0-100) ────────────────
     # Blends fundamentals (F-Score), solvency (Z-Score), and valuation signal.
     composite_score = None
@@ -804,6 +923,23 @@ def fetch_financials(ticker: str) -> dict:
         "pension_liab_m":     round(pension_liab_m,  1),
         "preferred_stock_m":  round(preferred_stock_m, 1),
         "minority_int_m":     round(minority_int_m,  1),
+
+        # D1: ROIC & Economic Profit
+        "roic_history":         roic_history,
+        "roic_ttm_pct":         roic_ttm_pct,
+        "roic_5yr_avg_pct":     roic_5yr_avg_pct,
+        "roic_wacc_spread_pct": roic_wacc_spread_pct,
+        "invested_capital_m":   round(invested_capital_m, 1),
+        "economic_profit_m":    economic_profit_m,
+
+        # D2: Fundamentals-implied growth
+        "reinvestment_rate_pct":           reinvestment_rate_pct,
+        "implied_growth_fundamentals_pct": implied_growth_fundamentals_pct,
+
+        # D3: Earnings quality
+        "cash_conversion_pct":  cash_conversion_pct,
+        "accruals_ratio_pct":   accruals_ratio_pct,
+        "sbc_drag_pct":         sbc_drag_pct,
 
         # PEG
         "peg_ratio": round(pe_ttm / earnings_growth_pct, 2)
