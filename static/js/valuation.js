@@ -452,6 +452,10 @@ function _stockHeaderHTML(d) {
         ${changeHTML}
       </div>
       <div id="val-sparkline-${d.ticker}" class="val-sparkline"></div>
+      <button class="val-export-btn" onclick="valExportSnapshot('${d.ticker}')" title="Copy a snapshot of all model results to clipboard">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy Snapshot
+      </button>
     </div>
   </div>`;
 }
@@ -676,6 +680,7 @@ function _categoriesHTML(tk, d) {
     <div class="val-methods-grid">
       ${_grahamCardHTML(tk, d)}
       ${_ncavCardHTML(tk, d)}
+      ${_fscoreCardHTML(tk, d)}
     </div>
   </div>
 
@@ -1102,7 +1107,18 @@ function _dcfCardHTML(tk, d) {
       ${_inp(`${tk}-dcf-wacc`,    'WACC (%)',                 d.wacc_suggestion, 'Weighted avg cost of capital — discounts FCFF to Enterprise Value', '0.1', '3', '30')}
       ${_inp(`${tk}-dcf-mos`,     'Margin of Safety (%)',     '15',         'Discount applied to final equity value', '1', '0', '50')}
     </div>
-    ${scenarioHTML}`;
+    ${scenarioHTML}
+    <details class="val-mc-wrap" id="mc-wrap-${tk}">
+      <summary>Monte Carlo Simulation</summary>
+      <div class="val-mc-body">
+        <div class="val-mc-note">Randomises growth &amp; WACC inputs over 500 runs to show a confidence range around the base DCF.</div>
+        <div class="val-inputs-grid" style="margin-bottom:8px;">
+          ${_inp(`${tk}-dcf-gstd`, 'Growth σ (%)', '8', 'Std-dev on Stage-1 growth (drawn from Normal distribution). Higher = wider distribution.', '0.5', '0', '30')}
+          ${_inp(`${tk}-dcf-wstd`, 'WACC σ (%)',   '1.5', 'Std-dev on WACC (drawn from Normal distribution).', '0.25', '0', '10')}
+        </div>
+        <div id="mc-out-${tk}" class="val-mc-out"></div>
+      </div>
+    </details>`;
 
   return _cardWrap('dcf', tk, 'Discounted Cash Flow (DCF)',
     '2-stage growth model: discount projected FCFs + terminal value back to today',
@@ -1834,6 +1850,259 @@ function _ncavCardHTML(tk, d) {
     body);
 }
 
+// ── E1: Monte Carlo DCF ───────────────────────────────────────────────────────
+
+function _normalSample(mean, std) {
+  // Box-Muller transform
+  const u1 = Math.random() || 1e-10, u2 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return mean + std * z;
+}
+
+function _renderDCFMonteCarlo(tk, fcffPs, g1, g2, tg, wacc, mos, ndPs, price, cur) {
+  const outEl = document.getElementById(`mc-out-${tk}`);
+  if (!outEl) return;
+
+  const gStd = _gv(`${tk}-dcf-gstd`) / 100;
+  const wStd = _gv(`${tk}-dcf-wstd`) / 100;
+
+  if (!fcffPs || fcffPs <= 0 || wacc <= 0) {
+    outEl.innerHTML = '<div class="val-mc-na">Set FCFF and WACC to run simulation.</div>';
+    return;
+  }
+
+  const N = 500;
+  const results = [];
+  for (let i = 0; i < N; i++) {
+    const sg1  = _normalSample(g1, gStd);
+    const sg2  = _normalSample(g2, gStd * 0.6);
+    const sw   = Math.max(0.03, _normalSample(wacc, wStd));
+    const stg  = Math.min(tg, sw - 0.005);
+    const fv   = _calcDCF(fcffPs, sg1, sg2, stg, sw, mos, ndPs);
+    if (fv !== null && fv > 0 && fv < price * 20) results.push(fv);
+  }
+
+  if (results.length < 10) {
+    outEl.innerHTML = '<div class="val-mc-na">Too few valid simulations — check inputs.</div>';
+    return;
+  }
+
+  results.sort((a, b) => a - b);
+  const n = results.length;
+  const pct = (p) => results[Math.min(n - 1, Math.max(0, Math.round(p * n / 100)))];
+  const p10 = pct(10), p25 = pct(25), p50 = pct(50), p75 = pct(75), p90 = pct(90);
+
+  // Build histogram (24 buckets)
+  const lo = results[0], hi = results[n - 1];
+  const BINS = 24;
+  const bw = (hi - lo) / BINS || 1;
+  const buckets = Array(BINS).fill(0);
+  results.forEach(v => {
+    const b = Math.min(BINS - 1, Math.floor((v - lo) / bw));
+    buckets[b]++;
+  });
+  const maxB = Math.max(...buckets);
+
+  // SVG histogram
+  const W = 280, H = 64, pad = 2;
+  const bWidth = (W - pad * 2) / BINS;
+  const bars = buckets.map((cnt, i) => {
+    const x = pad + i * bWidth;
+    const bh = cnt > 0 ? Math.max(2, (cnt / maxB) * (H - 16)) : 0;
+    const y = H - 16 - bh;
+    // colour by position relative to price
+    const midVal = lo + (i + 0.5) * bw;
+    const col = midVal < price ? '#f87171' : (midVal < p50 ? '#fbbf24' : '#6ee7b7');
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bWidth - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}" opacity="0.8"/>`;
+  }).join('');
+
+  // Price line
+  const priceX = Math.max(0, Math.min(W, pad + ((price - lo) / (hi - lo + 1e-10)) * (W - pad * 2)));
+  const priceLine = `<line x1="${priceX.toFixed(1)}" y1="0" x2="${priceX.toFixed(1)}" y2="${H - 16}" stroke="#e879f9" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+  const priceLabel = `<text x="${priceX.toFixed(1)}" y="${H - 2}" text-anchor="middle" font-size="8" fill="#e879f9">Price</text>`;
+
+  // P50 line
+  const p50X = pad + ((p50 - lo) / (hi - lo + 1e-10)) * (W - pad * 2);
+  const p50Line = `<line x1="${p50X.toFixed(1)}" y1="0" x2="${p50X.toFixed(1)}" y2="${H - 16}" stroke="var(--fg)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>`;
+
+  const svg = `<svg class="val-mc-hist" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${bars}${priceLine}${p50Line}${priceLabel}
+    <text x="${pad}" y="${H - 2}" text-anchor="start" font-size="8" fill="var(--muted)">${_fp(lo, cur)}</text>
+    <text x="${W - pad}" y="${H - 2}" text-anchor="end" font-size="8" fill="var(--muted)">${_fp(hi, cur)}</text>
+  </svg>`;
+
+  const pctFmt = (v) => {
+    if (!price || price <= 0) return '';
+    const d = ((v - price) / price) * 100;
+    return `<span class="${d >= 0 ? 'pos' : 'neg'}" style="font-size:9px;margin-left:3px;">(${d >= 0 ? '+' : ''}${d.toFixed(0)}%)</span>`;
+  };
+
+  outEl.innerHTML = `
+    ${svg}
+    <div class="val-mc-stats">
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P10</span><span class="val-mc-stat-val">${_fp(p10, cur)}${pctFmt(p10)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P25</span><span class="val-mc-stat-val">${_fp(p25, cur)}${pctFmt(p25)}</span></div>
+      <div class="val-mc-stat val-mc-median"><span class="val-mc-stat-lbl">P50 (median)</span><span class="val-mc-stat-val">${_fp(p50, cur)}${pctFmt(p50)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P75</span><span class="val-mc-stat-val">${_fp(p75, cur)}${pctFmt(p75)}</span></div>
+      <div class="val-mc-stat"><span class="val-mc-stat-lbl">P90</span><span class="val-mc-stat-val">${_fp(p90, cur)}${pctFmt(p90)}</span></div>
+    </div>
+    <div class="val-mc-caption">${results.length} valid runs · purple line = market price · white dashed = P50 base case</div>`;
+}
+
+// ── E2: Piotroski F-Score + Altman Z-Score deep-dive card ────────────────────
+
+function _fscoreCardHTML(tk, d) {
+  const tests   = d.f_score_details || {};
+  const fTotal  = d.f_score;
+  const zScore  = d.z_score;
+  const zBand   = d.z_score_band;
+
+  const TEST_META = {
+    profit_pos: { label: 'Net income > 0',             group: 'Profitability' },
+    roa_pos:    { label: 'Return on assets > 0',        group: 'Profitability' },
+    ocf_pos:    { label: 'Operating cash flow > 0',     group: 'Profitability' },
+    accruals:   { label: 'OCF > Net income (quality)',  group: 'Profitability' },
+    leverage:   { label: 'LT debt ratio ↓',             group: 'Leverage / Liquidity' },
+    liquidity:  { label: 'Current ratio ↑',             group: 'Leverage / Liquidity' },
+    dilution:   { label: 'No new shares issued',        group: 'Leverage / Liquidity' },
+    margin:     { label: 'Gross margin ↑ YoY',          group: 'Efficiency' },
+    turnover:   { label: 'Asset turnover ↑ YoY',        group: 'Efficiency' },
+  };
+
+  const GROUPS = ['Profitability', 'Leverage / Liquidity', 'Efficiency'];
+
+  const fBand   = fTotal === null || fTotal === undefined ? 'unknown'
+                : fTotal >= 7 ? 'strong' : fTotal >= 4 ? 'neutral' : 'weak';
+  const fLabel  = { strong: 'Strong', neutral: 'Neutral', weak: 'Weak', unknown: '—' }[fBand];
+
+  // Z-Score display
+  const zBandLabel = { safe: 'Safe Zone', grey: 'Grey Zone', distress: 'Distress Zone' }[zBand] || '—';
+  const zBandCls   = { safe: 'pos', grey: 'neutral', distress: 'neg' }[zBand] || '';
+
+  const groupsHTML = GROUPS.map(grp => {
+    const keys = Object.entries(TEST_META).filter(([, m]) => m.group === grp);
+    const rows = keys.map(([key, meta]) => {
+      const pass = tests[key];
+      const dotCls = pass === undefined ? 'unknown' : pass ? 'pass' : 'fail';
+      const icon   = pass === undefined ? '?' : pass ? '✓' : '✕';
+      return `<tr class="fs-row ${dotCls}">
+        <td class="fs-icon">${icon}</td>
+        <td class="fs-lbl">${meta.label}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="fs-group">
+      <div class="fs-group-title">${grp}</div>
+      <table class="fs-table"><tbody>${rows}</tbody></table>
+    </div>`;
+  }).join('');
+
+  const body = `
+    <div class="fs-header">
+      <div class="fs-score-badge ${fBand}">
+        <div class="fs-score-num">${fTotal !== null && fTotal !== undefined ? fTotal : '—'}<span class="fs-score-denom">/9</span></div>
+        <div class="fs-score-label">${fLabel}</div>
+      </div>
+      <div class="fs-z-block">
+        <div class="fs-z-label">Altman Z-Score</div>
+        <div class="fs-z-val ${zBandCls}">${zScore !== null && zScore !== undefined ? zScore.toFixed(2) : '—'}</div>
+        <div class="fs-z-band ${zBandCls}">${zBandLabel}</div>
+        <div class="fs-z-hint">&gt;2.99 safe · 1.81-2.99 grey · &lt;1.81 distress</div>
+      </div>
+    </div>
+    <div class="fs-groups">${groupsHTML}</div>`;
+
+  return _cardWrap('fscore', tk, 'Piotroski F-Score',
+    '9-point checklist across profitability, leverage, and efficiency. Z-Score = bankruptcy risk.',
+    body);
+}
+
+// ── E3: Snapshot export ───────────────────────────────────────────────────────
+
+function valExportSnapshot(tk) {
+  const s = _vStocks[tk];
+  if (!s || !s.data) { _valToast('No data loaded for ' + tk); return; }
+  const d = s.data;
+  const price = d.current_price;
+  const cur   = d.currency;
+
+  // Collect latest model results from DOM
+  const MODEL_IDS = ['dcf','epv','ddm','pe','evda','eveb','ps','peg','graham','ncav'];
+  const MODEL_LABELS = {
+    dcf:'DCF', epv:'EPV', ddm:'DDM', pe:'P/E',
+    evda:'EV/EBITDA', eveb:'EV/EBIT', ps:'P/S',
+    peg:'PEG', graham:'Graham', ncav:'NCAV',
+  };
+
+  const lines = [];
+  lines.push(`═══════════════════════════════════════`);
+  lines.push(`  ${d.name} (${d.ticker}) — Valuation Snapshot`);
+  lines.push(`  ${new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'})}`);
+  lines.push(`═══════════════════════════════════════`);
+  lines.push(`  Market price : ${_fp(price, cur)}`);
+  lines.push(`  WACC         : ${d.wacc_suggestion ? d.wacc_suggestion.toFixed(1) + '%' : '—'}`);
+  lines.push(`  Sector       : ${d.sector}`);
+  lines.push('');
+
+  // Consensus line
+  const conFvEl = document.getElementById(`con-${tk}-fv`);
+  const conMosEl = document.getElementById(`con-${tk}-mos`);
+  const conVerdEl = document.getElementById(`con-${tk}-verdict`);
+  if (conFvEl && conFvEl.textContent !== '—') {
+    lines.push(`  Consensus FV : ${conFvEl.textContent}`);
+    lines.push(`  Margin-of-Safety : ${conMosEl ? conMosEl.textContent : '—'}`);
+    lines.push(`  Verdict : ${conVerdEl ? conVerdEl.textContent.replace(/[★▲◆▼✕]/g,'').trim() : '—'}`);
+    lines.push('');
+  }
+
+  lines.push(`  ─── Model Estimates ───────────────────`);
+  MODEL_IDS.forEach(id => {
+    const el = document.getElementById(`res-${tk}-${id}`);
+    if (!el) return;
+    const fv = el.textContent?.trim();
+    if (!fv || fv === '—') return;
+    const udEl = document.getElementById(`ud-${tk}-${id}`);
+    const ud = udEl ? udEl.textContent?.trim() : '';
+    const padded = MODEL_LABELS[id].padEnd(12);
+    lines.push(`  ${padded}: ${fv.padEnd(10)} ${ud}`);
+  });
+  lines.push('');
+
+  // Quality snapshot
+  if (d.f_score !== null && d.f_score !== undefined) {
+    lines.push(`  ─── Quality Signals ───────────────────`);
+    lines.push(`  F-Score  : ${d.f_score}/9`);
+    if (d.z_score !== null && d.z_score !== undefined) {
+      lines.push(`  Z-Score  : ${d.z_score.toFixed(2)} (${(d.z_score_band || '—').toUpperCase()})`);
+    }
+    if (d.cash_conversion_pct !== null && d.cash_conversion_pct !== undefined) {
+      lines.push(`  Cash Conv: ${d.cash_conversion_pct.toFixed(0)}%`);
+    }
+    if (d.roic_ttm_pct !== null && d.roic_ttm_pct !== undefined) {
+      lines.push(`  ROIC TTM : ${d.roic_ttm_pct.toFixed(1)}%`);
+    }
+    lines.push('');
+  }
+
+  lines.push(`  Generated by PortOpt Valuation Module`);
+  lines.push(`═══════════════════════════════════════`);
+
+  const text = lines.join('\n');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text)
+      .then(() => _valToast('Snapshot copied to clipboard ✓'))
+      .catch(() => _valToast('Copy failed — clipboard permission denied'));
+  } else {
+    // Fallback: textarea select
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    _valToast('Snapshot copied to clipboard ✓');
+  }
+}
+
 // ── Historical percentile bands ──────────────────────────────────────────────
 
 function _historicalBandHTML(tk, modelId) {
@@ -1906,6 +2175,9 @@ function _recalcTicker(tk) {
 
   // DCF Scenarios (Bear / Base / Bull) & probability-weighted fair value
   _recalcDCFScenarios(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, dcfNdPs, results.dcf, cur);
+
+  // E1: Monte Carlo DCF
+  _renderDCFMonteCarlo(tk, dcfFcfPs, dcfG1, dcfG2, dcfTg, dcfWacc, dcfMos, dcfNdPs, price, cur);
 
   // Reverse DCF — solves for implied growth, NOT added to `results` (excluded from compare chart)
   const rdFcf     = _gv(`${tk}-rdcf-fcf`);
@@ -2051,6 +2323,12 @@ function _recalcTicker(tk) {
   if (qualEl) { qualEl.textContent = ''; qualEl.style.display = 'none'; }
   const qualUD = document.getElementById(`ud-${tk}-qual`);
   if (qualUD) qualUD.style.display = 'none';
+
+  // E2: F-Score card — informational, no fair value.
+  const fsEl = document.getElementById(`res-${tk}-fscore`);
+  if (fsEl) { fsEl.textContent = ''; fsEl.style.display = 'none'; }
+  const fsUD = document.getElementById(`ud-${tk}-fscore`);
+  if (fsUD) fsUD.style.display = 'none';
 
   // D4: Consensus fair value summary
   _renderConsensus(tk, results, price, cur);
